@@ -1,5 +1,5 @@
 import { getStylesForProperty, Style } from "css-to-react-native";
-import { ImageStyle, TextStyle, ViewStyle } from "react-native";
+import type { ImageStyle, TextStyle, ViewStyle } from "react-native";
 
 export type PropertyGuard<T extends string> = (
   value: string,

@@ -1,29 +1,32 @@
-import { ReactNode, Children, cloneElement, isValidElement } from "react";
-import { StyleProp } from "react-native";
+import { ReactNode, Children, isValidElement, createElement } from "react";
 import { isFragment } from "react-is";
-import { StylesArray, StyleSheetRuntime } from "../style-sheet";
 import { matchesMask, PARENT } from "../utils/selector";
-import { ComponentState } from "./use-component-state";
+import { StyledChild } from "./styled-child";
 
 export interface WithStyledChildrenOptions {
+  childClasses: string[];
   componentChildren: ReactNode;
-  store: StyleSheetRuntime;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  stylesArray: StylesArray<any>;
   mask: number;
-  componentState: ComponentState;
+  parentActive: boolean;
+  parentFocus: boolean;
+  parentHover: boolean;
 }
 
 export function withStyledChildren({
+  childClasses,
   componentChildren,
-  componentState,
   mask,
-  store,
-  stylesArray,
+  parentActive,
+  parentFocus,
+  parentHover,
 }: WithStyledChildrenOptions): ReactNode {
+  if (childClasses.length === 0) {
+    return componentChildren;
+  }
+
   const isParent = matchesMask(mask, PARENT);
 
-  if (!stylesArray.childClassNames && !isParent) {
+  if (!isParent) {
     return componentChildren;
   }
 
@@ -32,26 +35,24 @@ export function withStyledChildren({
       componentChildren.props.children
     : componentChildren;
 
+  const className = childClasses.join(" ");
+
   return Children.toArray(children)
-    .filter(Boolean)
+    .filter(Boolean) // Remove nothing children
     .map((child, index) => {
-      if (!isValidElement<{ style?: StyleProp<unknown> }>(child)) {
+      // Skip number and strings
+      if (!isValidElement(child)) {
         return child;
       }
 
-      const style = store.getChildStyles(stylesArray, {
-        nthChild: index + 1,
-        parentHover: componentState.hover,
-        parentFocus: componentState.focus,
-        parentActive: componentState.active,
+      return createElement(StyledChild, {
+        child,
+        nthChild: index,
+        className,
+        parentActive,
+        parentFocus,
+        parentHover,
+        ...child.props,
       });
-
-      if (!style || style.length === 0) {
-        return child;
-      }
-
-      return child.props.style
-        ? cloneElement(child, { style: [child.props.style, style] })
-        : cloneElement(child, { style });
     });
 }

@@ -1,79 +1,43 @@
 import { Appearance } from "react-native";
+import { store, topicValues } from "./store";
 
-export type ColorSchemeName = "light" | "dark";
+export type ColorScheme = "light" | "dark";
 export type ColorSchemeSystem = "light" | "dark" | "system";
 
-export abstract class ColorSchemeStore {
-  colorSchemeListeners = new Set<() => void>();
-  colorScheme: ColorSchemeName = Appearance.getColorScheme() || "light";
-  colorSchemeSystem: ColorSchemeSystem = "system";
-
-  constructor() {
-    try {
-      if (typeof localStorage !== "undefined") {
-        const isDarkMode = window.matchMedia(
-          "(prefers-color-scheme: dark)"
-        ).matches;
-
-        if (
-          localStorage.theme === "dark" ||
-          (!("theme" in localStorage) && isDarkMode)
-        ) {
-          document.documentElement.classList.add("dark");
-          this.colorScheme = "dark";
-        } else {
-          document.documentElement.classList.remove("dark");
-          this.colorScheme = "light";
-        }
-
-        this.subscribeColorScheme(() => {
-          localStorage.theme = this.colorScheme;
-        });
-      }
-    } catch {
-      // Just silently fail
-    }
-  }
-
-  abstract notifyMedia(_: string[]): void;
-
-  private notifyColorScheme() {
-    for (const l of this.colorSchemeListeners) l();
-  }
-
-  subscribeColorScheme = (listener: () => void) => {
-    this.colorSchemeListeners.add(listener);
-    return () => this.colorSchemeListeners.delete(listener);
-  };
-
-  getColorScheme = () => {
-    return this.colorScheme;
-  };
-
-  setColorScheme = (colorSchemeSystem: ColorSchemeSystem) => {
-    const oldColorScheme = this.colorScheme;
-
-    this.colorSchemeSystem = colorSchemeSystem;
-    this.colorScheme =
-      this.colorSchemeSystem === "system"
-        ? Appearance.getColorScheme() || "light"
-        : this.colorSchemeSystem;
-
-    if (oldColorScheme !== this.colorScheme) {
-      this.notifyMedia(["colorScheme"]);
-      this.notifyColorScheme();
-    }
-  };
-
-  toggleColorScheme = () => {
-    const currentColor =
-      this.colorSchemeSystem === "system"
-        ? Appearance.getColorScheme() || "light"
-        : this.colorScheme;
-
-    this.colorScheme = currentColor === "light" ? "dark" : "light";
-    this.colorSchemeSystem = currentColor;
-    this.notifyMedia(["colorScheme"]);
-    this.notifyColorScheme();
-  };
+export function setColorScheme(system: ColorSchemeSystem) {
+  store.setState((state) => ({
+    [topicValues]: {
+      ...state[topicValues],
+      colorSchemeSystem: system,
+      colorScheme:
+        system === "system" ? Appearance.getColorScheme() || "light" : system,
+    },
+  }));
 }
+export function toggleColorScheme() {
+  return store.setState((state) => {
+    const currentColor =
+      state[topicValues].colorSchemeSystem === "system"
+        ? Appearance.getColorScheme() || "light"
+        : state[topicValues].colorScheme;
+
+    const newColor = currentColor === "light" ? "dark" : "light";
+
+    return {
+      [topicValues]: {
+        ...state[topicValues],
+        colorScheme: newColor,
+        colorSchemeSystem: newColor,
+      },
+    };
+  });
+}
+
+store.subscribe(
+  (state) => state[topicValues].colorScheme,
+  (colorScheme) => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.nativewind_theme = colorScheme;
+    }
+  }
+);

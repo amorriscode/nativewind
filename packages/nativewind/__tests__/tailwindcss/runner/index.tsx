@@ -1,3 +1,5 @@
+import { ThemeConfig } from "tailwindcss/types/config";
+
 import { extractStyles } from "../../../src/postcss/extract-styles";
 import {
   AtRuleTuple,
@@ -8,14 +10,7 @@ import {
 
 import cssPlugin from "../../../src/tailwind/css";
 import { nativePlugin } from "../../../src/tailwind/native";
-import { PropsWithChildren, useMemo } from "react";
-import { StoreContext, StyleSheetRuntime } from "../../../src/style-sheet";
-import {
-  TestStyleSheetRuntime,
-  TestStyleSheetStoreConstructor,
-} from "../../style-sheet/tests";
-import { isRuntimeFunction } from "../../../src/style-sheet/style-function-helpers";
-import { ThemeConfig } from "tailwindcss/types/config";
+import { NativeWindStyleSheet } from "../../../src";
 
 export type Test = [string, TestValues] | [string, StyleRecord, true];
 
@@ -32,7 +27,7 @@ export interface TestValues {
   styles?: Record<string, Style>;
   topics?: Record<string, Array<string>>;
   masks?: Record<string, number>;
-  units?: StyleSheetRuntime["units"];
+  units?: Record<string, Record<string, string>>;
   atRules?: Record<string, Array<AtRuleTuple[]>>;
   transforms?: Record<string, boolean>;
   childClasses?: Record<string, string[]>;
@@ -71,8 +66,9 @@ export function assertStyles(
   }
 }
 
-function dangerouslyCompileStyles(theme: Partial<ThemeConfig> = {}) {
-  return (css: string, store: StyleSheetRuntime) => {
+export function resetStyleSheet(theme?: Partial<ThemeConfig>) {
+  NativeWindStyleSheet.reset();
+  NativeWindStyleSheet.setDangerouslyCompileStyles((css, store) => {
     const { raw } = extractStyles({
       theme,
       plugins: [cssPlugin, nativePlugin({})],
@@ -80,72 +76,6 @@ function dangerouslyCompileStyles(theme: Partial<ThemeConfig> = {}) {
       safelist: [css],
     });
 
-    function compileThemeFunction(v: string): unknown {
-      const { name, args } = JSON.parse(v.slice(2)) as {
-        name: string;
-        args: unknown[];
-      };
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fn: any = store[name as keyof StyleSheetRuntime];
-
-      return fn(
-        ...args.map((v) => {
-          if (typeof v === "object" && v) {
-            for (const [key, value] of Object.entries(v)) {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              (v as any)[key] = isRuntimeFunction(value)
-                ? compileThemeFunction(value)
-                : value;
-            }
-
-            return v;
-          } else {
-            return isRuntimeFunction(v) ? compileThemeFunction(v) : v;
-          }
-        })
-      );
-    }
-
-    const serializedStyles: Record<string, Record<string, unknown>> = {};
-
-    for (const [key, style] of Object.entries(raw.styles || {})) {
-      serializedStyles[key] = {};
-
-      for (const [k, v] of Object.entries(style)) {
-        if (isRuntimeFunction(v)) {
-          serializedStyles[key][k] = compileThemeFunction(v);
-        } else {
-          serializedStyles[key][k] = v;
-        }
-      }
-    }
-
-    store.create({
-      ...raw,
-      styles: serializedStyles,
-    });
-  };
-}
-
-export interface TestProviderProps extends TestStyleSheetStoreConstructor {
-  theme?: Partial<ThemeConfig>;
-}
-
-export function TestProvider({
-  children,
-  theme,
-  ...props
-}: PropsWithChildren<TestProviderProps>) {
-  const store = useMemo(
-    () =>
-      new TestStyleSheetRuntime({
-        ...props,
-        dangerouslyCompileStyles: dangerouslyCompileStyles(theme),
-      }),
-    [theme]
-  );
-  return (
-    <StoreContext.Provider value={store}>{children}</StoreContext.Provider>
-  );
+    store.create(raw);
+  });
 }

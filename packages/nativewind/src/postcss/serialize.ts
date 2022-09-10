@@ -14,7 +14,6 @@ import {
   stringLiteral,
   unaryExpression,
 } from "@babel/types";
-import { isRuntimeFunction } from "../style-sheet/style-function-helpers";
 import { ExtractedValues } from "./plugin";
 
 export function serializer({
@@ -167,4 +166,8 @@ function babelSerializeLiteral(literal: any): Expression {
 
 function isObject(literal: unknown): literal is Record<string, unknown> {
   return typeof literal === "object";
+}
+
+export function isRuntimeFunction(input: unknown): input is string {
+  return typeof input === "string" && input.startsWith("__{");
 }

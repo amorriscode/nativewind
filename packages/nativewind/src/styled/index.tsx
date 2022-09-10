@@ -10,12 +10,12 @@ import {
   PropsWithoutRef,
   useContext,
 } from "react";
+import { NativeWindStyleSheet } from "../style-sheet";
 import { InteractionProps, useInteraction } from "./use-interaction";
 import { withStyledChildren } from "./with-styled-children";
 import { withStyledProps } from "./with-styled-props";
 import { useTailwind } from "./use-tailwind";
 import { StyleProp } from "react-native";
-import { StoreContext } from "../style-sheet";
 import { GroupContext, IsolateGroupContext } from "./group-context";
 import { useComponentState } from "./use-component-state";
 import { GROUP, GROUP_ISO, matchesMask } from "../utils/selector";
@@ -117,9 +117,9 @@ export function styled<
     }: StyledProps<T>,
     ref: ForwardedRef<unknown>
   ) {
-    const store = useContext(StoreContext);
     const groupContext = useContext(GroupContext);
     const isolateGroupContext = useContext(IsolateGroupContext);
+    const preprocessed = NativeWindStyleSheet.isPreprocessed();
 
     const classNameWithDefaults = baseClassName
       ? `${baseClassName} ${twClassName ?? propClassName}`
@@ -138,8 +138,8 @@ export function styled<
       mask: propsMask,
       className,
     } = withStyledProps<T, P, C>({
+      preprocessed,
       className: classNameWithDefaults,
-      preprocessed: store.preprocessed,
       propsToTransform,
       classProps,
       componentProps: componentProps as unknown as Record<
@@ -151,15 +151,16 @@ export function styled<
     /**
      * Resolve the className->style
      */
-    const style = useTailwind({
+    const [style, childClasses, styleMask] = useTailwind({
       className,
       inlineStyles,
+      preprocessed,
       ...componentState,
       ...groupContext,
       ...isolateGroupContext,
     });
 
-    const mask = (style.mask || 0) | propsMask;
+    const mask = styleMask | propsMask;
 
     /**
      * Determine if we need event handlers for our styles
@@ -174,27 +175,32 @@ export function styled<
      * Resolve the child styles
      */
     const children = withStyledChildren({
+      childClasses,
       componentChildren,
-      componentState,
       mask,
-      store,
-      stylesArray: style,
+      parentActive: componentState.active,
+      parentFocus: componentState.focus,
+      parentHover: componentState.hover,
     });
 
-    const element = createElement(Component, {
+    /**
+     * Pass the styles to the element
+     */
+    let reactNode: ReactNode = createElement(Component, {
       ...componentProps,
       ...handlers,
       ...styledProps,
-      style: style.length > 0 ? style : undefined,
+      style: style,
       children,
       ref,
     } as unknown as T);
 
-    let returnValue: ReactNode = element;
-
+    /**
+     * Determine if we need to wrap element in Providers
+     */
     if (matchesMask(mask, GROUP)) {
-      returnValue = createElement(GroupContext.Provider, {
-        children: returnValue,
+      reactNode = createElement(GroupContext.Provider, {
+        children: reactNode,
         value: {
           groupHover: groupContext.groupHover || componentState.hover,
           groupFocus: groupContext.groupFocus || componentState.focus,
@@ -204,8 +210,8 @@ export function styled<
     }
 
     if (matchesMask(mask, GROUP_ISO)) {
-      returnValue = createElement(IsolateGroupContext.Provider, {
-        children: returnValue,
+      reactNode = createElement(IsolateGroupContext.Provider, {
+        children: reactNode,
         value: {
           isolateGroupHover: componentState.hover,
           isolateGroupFocus: componentState.focus,
@@ -214,7 +220,7 @@ export function styled<
       });
     }
 
-    return returnValue;
+    return reactNode;
   }
 
   if (typeof Component !== "string") {

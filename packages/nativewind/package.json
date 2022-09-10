@@ -58,7 +58,8 @@
     "postcss-css-variables": "^0.18.0",
     "postcss-nested": "^5.0.6",
     "react-is": "^18.1.0",
-    "use-sync-external-store": "^1.1.0"
+    "use-sync-external-store": "^1.1.0",
+    "zustand": "^4.1.1"
   },
   "devDependencies": {
     "@babel/core": "7.18.13",

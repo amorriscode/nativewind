@@ -5,7 +5,6 @@ import {
   Platform,
   ScaledSize,
 } from "react-native";
-import { StyleSheetRuntime } from "../../src/style-sheet/runtime";
 import { StateBitOptions } from "../../src/utils/selector";
 
 type StyleSheetRuntimeCreate = Parameters<StyleSheetRuntime["create"]>[0];

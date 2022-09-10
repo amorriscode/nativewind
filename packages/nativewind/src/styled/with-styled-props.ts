@@ -31,40 +31,44 @@ export function withStyledProps<T, P extends keyof T, C extends keyof T>({
       }
     } else {
       for (const prop of classProps) {
-        const style = useTailwind({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const [style, , styleMask] = useTailwind({
           className: componentProps[prop],
           flatten: true,
+          preprocessed,
         });
 
-        if (style.mask) {
-          mask |= style.mask;
+        if (styleMask) {
+          mask |= styleMask;
         }
 
-        Object.assign(styledProps, { [prop]: undefined }, style[0]);
+        Object.assign(
+          styledProps,
+          { [prop]: undefined },
+          Array.isArray(style) ? style[0] : style
+        );
       }
     }
   }
 
   if (propsToTransform && !preprocessed) {
     for (const [prop, styleKey] of Object.entries(propsToTransform)) {
-      const styleArray = useTailwind({
+      const [style, , styleMask] = useTailwind({
         className: componentProps[prop],
         flatten: styleKey !== true,
+        preprocessed,
       });
 
-      if (styleArray.length === 0) {
-        continue;
-      }
-
-      if (styleArray.mask) {
-        mask |= styleArray.mask;
+      if (styleMask) {
+        mask |= styleMask;
       }
 
       if (typeof styleKey === "boolean") {
-        styledProps[prop as P | C] = styleArray;
+        styledProps[prop as P | C] = style;
       } else {
+        const firstStyle = Array.isArray(style) ? style[0] : style;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        styledProps[prop as P | C] = (styleArray[0] as any)[styleKey as any];
+        styledProps[prop as P | C] = (firstStyle as any)[styleKey as any];
       }
     }
   }

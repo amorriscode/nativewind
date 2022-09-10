@@ -1,28 +1,75 @@
-import { createContext } from "react";
-import { StyleSheetRuntime } from "./runtime";
+import {
+  Appearance,
+  PixelRatio,
+  Platform,
+  PlatformColor,
+  PlatformOSType,
+  StyleSheet,
+} from "react-native";
+import createStore from "zustand";
 
-export type { StylesArray, Snapshot } from "./runtime";
-export { StyleSheetRuntime } from "./runtime";
-
-const runtime = new StyleSheetRuntime();
+import { create } from "./create";
+import { resetInternals } from "./internals";
+import {
+  getAtomsAndMask,
+  getAtomStyles,
+  getChildAtoms,
+  getChildClassNames,
+} from "./get-styles";
+import { setColorScheme, toggleColorScheme } from "./color-scheme";
+import {
+  dangerouslyCompileStyles,
+  initialState,
+  preprocessed,
+  State,
+  store,
+} from "./store";
 
 export const NativeWindStyleSheet = {
-  create: runtime.create.bind(runtime),
-  setDimensions: runtime.setDimensions.bind(runtime),
-  setAppearance: runtime.setAppearance.bind(runtime),
-  setPlatform: runtime.setPlatform.bind(runtime),
-  setOutput: runtime.setOutput.bind(runtime),
-  setColorScheme: runtime.setColorScheme.bind(runtime),
-  platformSelect: runtime.platformSelect.bind(runtime),
-  platformColor: runtime.platformColor.bind(runtime),
-  hairlineWidth: runtime.hairlineWidth.bind(runtime),
-  pixelRatio: runtime.pixelRatio.bind(runtime),
-  fontScale: runtime.fontScale.bind(runtime),
-  getPixelSizeForLayoutSize: runtime.getPixelSizeForLayoutSize.bind(runtime),
-  roundToNearestPixel: runtime.roundToNearestPixel.bind(runtime),
-  setDangerouslyCompileStyles:
-    runtime.setDangerouslyCompileStyles.bind(runtime),
+  store: createStore(store),
+  create,
+  getAtomsAndMask,
+  getAtomStyles,
+  getChildClassNames,
+  getChildAtoms,
+  reset: () => {
+    store.setState(initialState);
+    resetInternals();
+  },
+  isPreprocessed: () => store.getState()[preprocessed],
+  setOutput: (specifics: {
+    [platform in PlatformOSType | "default"]?: "css" | "native";
+  }) => {
+    store.setState(() => ({
+      [preprocessed]: Platform.select(specifics) === "css",
+    }));
+  },
+  setColorScheme,
+  toggleColorScheme,
+  setDangerouslyCompileStyles: (
+    callback: State[typeof dangerouslyCompileStyles]
+  ) => {
+    store.setState(() => ({
+      [dangerouslyCompileStyles]: callback,
+    }));
+  },
+  platformSelect: Platform.select,
+  platformColor: (color: string) => {
+    // RWN does not implement PlatformColor
+    // https://github.com/necolas/react-native-web/issues/2128
+    return PlatformColor ? PlatformColor(color) : color;
+  },
+  hairlineWidth() {
+    return StyleSheet.hairlineWidth;
+  },
+  pixelRatio: (value: number | Record<string, number>) => {
+    const ratio = PixelRatio.get();
+    return typeof value === "number" ? ratio * value : value[ratio] ?? ratio;
+  },
+  fontScale: (value: number | Record<string, number>) => {
+    const scale = PixelRatio.getFontScale();
+    return typeof value === "number" ? scale * value : value[scale] ?? scale;
+  },
+  getPixelSizeForLayoutSize: PixelRatio.getPixelSizeForLayoutSize,
+  roundToNearestPixel: PixelRatio.getPixelSizeForLayoutSize,
 };
-
-// We add this to a context so its overridable in tests
-export const StoreContext = createContext(runtime);

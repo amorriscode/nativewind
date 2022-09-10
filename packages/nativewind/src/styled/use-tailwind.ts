@@ -1,95 +1,57 @@
-import { useContext, useMemo } from "react";
-import { StyleProp, StyleSheet } from "react-native";
-import { useSyncExternalStoreWithSelector } from "use-sync-external-store/shim/with-selector";
-import { Snapshot, StoreContext, StylesArray } from "../style-sheet";
-import { Style } from "../style-sheet/runtime";
+import { useMemo } from "react";
+import shallow from "zustand/shallow";
+
+import { NativeWindStyleSheet } from "../style-sheet";
+import { StyleArray, StyleProp } from "../types/common";
 import { StateBitOptions } from "../utils/selector";
 
-export interface UseTailwindOptions<T extends Style> extends StateBitOptions {
+export interface UseTailwindOptions extends StateBitOptions {
   className: string;
-  inlineStyles?: StyleProp<T>;
-  additionalStyles?: StylesArray<T>;
+  inlineStyles?: StyleArray;
+  additionalStyles?: StyleArray;
   flatten?: boolean;
+  preprocessed: boolean;
 }
 
-export function useTailwind<T extends Style>({
+export function useTailwind({
   className,
   inlineStyles,
   additionalStyles,
-  hover,
-  focus,
-  active,
-  isolateGroupHover,
-  isolateGroupFocus,
-  isolateGroupActive,
-  groupHover,
-  groupFocus,
-  groupActive,
   flatten,
-}: UseTailwindOptions<T>): StylesArray<T> {
-  const store = useContext(StoreContext);
+  preprocessed,
+  ...stateBitOptions
+}: UseTailwindOptions): [StyleProp, string[], number] {
+  if (preprocessed) {
+    const styles = useMemo(() => {
+      return [
+        {
+          nativewind: className,
+          $$css: true,
+        },
+        inlineStyles,
+      ] as StyleProp;
+    }, [className, inlineStyles]);
 
-  const [subscribe, getSnapshot, selector] = useMemo(() => {
-    const selector = store.prepare(className, {
-      hover,
-      focus,
-      active,
-      isolateGroupHover,
-      isolateGroupFocus,
-      isolateGroupActive,
-      groupHover,
-      groupFocus,
-      groupActive,
-    });
+    return [styles, [], 0];
+  }
 
-    return [
-      store.subscribe,
-      store.getSnapshot,
-      (snapshot: Snapshot): StylesArray | undefined => snapshot[selector],
-    ];
-  }, [
-    store,
+  const { atoms, mask } = NativeWindStyleSheet.getAtomsAndMask(
     className,
-    hover,
-    focus,
-    active,
-    isolateGroupHover,
-    isolateGroupFocus,
-    isolateGroupActive,
-    groupHover,
-    groupFocus,
-    groupActive,
-  ]);
-
-  const styles = useSyncExternalStoreWithSelector(
-    subscribe,
-    getSnapshot,
-    getSnapshot,
-    selector
+    stateBitOptions
   );
 
-  return useMemo(() => {
-    const stylesArray: StylesArray = [];
+  // Get the styles for this element
+  const styles = NativeWindStyleSheet.store(() => {
+    return NativeWindStyleSheet.getAtomStyles(atoms, {
+      additionalStyles,
+      flatten,
+    });
+  }, shallow);
 
-    if (styles) {
-      stylesArray.push(...styles);
-      stylesArray.childClassNames = styles.childClassNames;
-    }
+  // Get the classes that we need to pass to our children
+  const childClasses = NativeWindStyleSheet.store(() => {
+    return NativeWindStyleSheet.getChildClassNames(atoms);
+  }, shallow);
 
-    if (additionalStyles) {
-      stylesArray.push(...additionalStyles);
-    }
-    if (inlineStyles) {
-      stylesArray.push(inlineStyles);
-    }
-
-    if (flatten) {
-      const flatStyles: StylesArray = [StyleSheet.flatten(stylesArray)];
-      flatStyles.mask = styles?.mask;
-      return flatStyles;
-    }
-
-    stylesArray.mask = styles?.mask;
-    return stylesArray;
-  }, [styles, inlineStyles, additionalStyles, flatten]) as StylesArray<T>;
+  return [styles, childClasses, mask];
 }

@@ -7,7 +7,6 @@ import {
 import { toReactNative } from "./to-react-native";
 import { StyleRecord, Style, StyleError, AtRuleTuple } from "../types/common";
 import { outputWriter } from "./fs-writer";
-import { StyleSheetRuntime } from "../style-sheet";
 import { getRuntime } from "./get-runtime";
 
 const atRuleSymbol = Symbol("media");
@@ -24,7 +23,7 @@ export interface ExtractedValues {
   styles: StyleRecord;
   topics: Record<string, Array<string>>;
   masks: Record<string, number>;
-  units: StyleSheetRuntime["units"];
+  units: Record<string, Record<string, string>>;
   childClasses: Record<string, string[]>;
   atRules: Record<string, Array<AtRuleTuple[]>>;
   transforms: Record<string, true>;
