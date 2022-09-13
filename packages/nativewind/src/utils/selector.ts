@@ -16,12 +16,12 @@ import type { PlatformOSType } from "react-native";
 /* prettier-ignore */ export const HOVER            = 0b0000000000000100000000;
 /* prettier-ignore */ export const ACTIVE           = 0b0000000000000010000000;
 /* prettier-ignore */ export const RTL              = 0b0000000000000001000000;
-// /* prettier-ignore */ export const OSX              = 0b0000000000000000100000;
-// /* prettier-ignore */ export const WINDOWS          = 0b0000000000000000010000;
-// /* prettier-ignore */ export const WEB              = 0b0000000000000000001000;
-// /* prettier-ignore */ export const ANDROID          = 0b0000000000000000000100;
-// /* prettier-ignore */ export const IOS              = 0b0000000000000000000010;
-// /* prettier-ignore */ export const DARK_MODE        = 0b0000000000000000000001;
+/* prettier-ignore */ export const OSX              = 0b0000000000000000100000;
+/* prettier-ignore */ export const WINDOWS          = 0b0000000000000000010000;
+/* prettier-ignore */ export const WEB              = 0b0000000000000000001000;
+/* prettier-ignore */ export const ANDROID          = 0b0000000000000000000100;
+/* prettier-ignore */ export const IOS              = 0b0000000000000000000010;
+/* prettier-ignore */ export const DARK_MODE        = 0b0000000000000000000001;
 
 const makePseudoClassTest = (pseudoClass: string) => {
   const regex = new RegExp(`\\S+::${pseudoClass}(:|\\s|$)`);
@@ -88,12 +88,12 @@ export function getStateBit(options: StateBitOptions = {}) {
   let finalBit = options.baseBit || 0;
 
   // Remove these in next major version
-  // if (options.darkMode) finalBit |= DARK_MODE;
-  // if (options.platform === "ios") finalBit |= IOS;
-  // if (options.platform === "android") finalBit |= ANDROID;
-  // if (options.platform === "web") finalBit |= WEB;
-  // if (options.platform === "windows") finalBit |= WINDOWS;
-  // if (options.platform === "macos") finalBit |= OSX;
+  if (options.darkMode) finalBit |= DARK_MODE;
+  if (options.platform === "ios") finalBit |= IOS;
+  if (options.platform === "android") finalBit |= ANDROID;
+  if (options.platform === "web") finalBit |= WEB;
+  if (options.platform === "windows") finalBit |= WINDOWS;
+  if (options.platform === "macos") finalBit |= OSX;
   if (options.rtl) finalBit |= RTL;
   if (options.active) finalBit |= ACTIVE;
   if (options.hover) finalBit |= HOVER;

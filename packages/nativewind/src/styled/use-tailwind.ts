@@ -35,23 +35,25 @@ export function useTailwind({
     return [styles, [], 0];
   }
 
-  const { atoms, mask } = NativeWindStyleSheet.getAtomsAndMask(
-    className,
-    stateBitOptions
-  );
+  return [[], [], 0];
 
-  // Get the styles for this element
-  const styles = NativeWindStyleSheet.store(() => {
-    return NativeWindStyleSheet.getAtomStyles(atoms, {
-      additionalStyles,
-      flatten,
-    });
-  }, shallow);
+  // const { atoms, mask } = NativeWindStyleSheet.getAtomsAndMask(
+  //   className,
+  //   stateBitOptions
+  // );
 
-  // Get the classes that we need to pass to our children
-  const childClasses = NativeWindStyleSheet.store(() => {
-    return NativeWindStyleSheet.getChildClassNames(atoms);
-  }, shallow);
+  // // Get the styles for this element
+  // const styles = NativeWindStyleSheet.store(() => {
+  //   return NativeWindStyleSheet.getAtomStyles(atoms, {
+  //     additionalStyles,
+  //     flatten,
+  //   });
+  // }, shallow);
 
-  return [styles, childClasses, mask];
+  // // Get the classes that we need to pass to our children
+  // const childClasses = NativeWindStyleSheet.store(() => {
+  //   return NativeWindStyleSheet.getChildClassNames(atoms);
+  // }, shallow);
+
+  // return [styles, childClasses, mask];
 }

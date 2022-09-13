@@ -1,247 +1,268 @@
-import { TextStyle } from "react-native";
-import { DARK_MODE, HOVER } from "../../src/utils/selector";
-import {
-  createTestAppearance,
-  // createTestDimensions,
-  TestStyleSheetRuntime,
-} from "./tests";
+import { Dimensions } from "react-native";
+import { renderHook, act } from "@testing-library/react-hooks";
+import { NativeWindStyleSheet } from "../../src";
 
-describe("StyleSheetStore", () => {
-  test("can retrieve a style", () => {
-    const style = { color: "black" };
-    const store = new TestStyleSheetRuntime({
-      styles: {
-        "text-black": style,
-      },
-    });
+afterEach(() => {
+  NativeWindStyleSheet.reset();
+  jest.clearAllMocks();
+});
 
-    expect(store.getTestStyle("text-black")).toEqual([style]);
+const { create, useSync, setDimensions } = NativeWindStyleSheet;
+
+test("useSync is stable", () => {
+  create({
+    "text-black": { styles: [{ color: "black" }] },
+    "font-400": { styles: [{ fontWeight: "400" }] },
   });
 
-  test("can retrieve a multiple style", () => {
-    const textStyle: TextStyle = { color: "black" };
-    const fontStyle: TextStyle = { fontWeight: "400" };
+  const { result } = renderHook(() => useSync("text-black font-400"));
 
-    const store = new TestStyleSheetRuntime({
-      styles: {
-        "text-black": textStyle,
-        "font-400": fontStyle,
-      },
-    });
+  const firstResult = result.current;
+  act(() => {});
+  const secondResult = result.current;
 
-    expect(store.getTestStyle("text-black font-400")).toEqual([
-      textStyle,
-      fontStyle,
-    ]);
-  });
+  expect(firstResult.childClassNames).toBeUndefined();
+  expect(firstResult.styles).toEqual([
+    { color: "black" },
+    { fontWeight: "400" },
+  ]);
 
-  test("retrieving the same style will keep the same identity", () => {
-    const store = new TestStyleSheetRuntime({
-      styles: {
-        "text-black": { color: "black" },
-      },
-    });
+  expect(firstResult.styles).toBe(secondResult.styles);
+  expect(firstResult.childClassNames).toBe(secondResult.childClassNames);
+});
 
-    expect(store.getStyle("text-black")).toBe(store.getStyle("text-black"));
-  });
-
-  test("can match pseudo-classes", () => {
-    const store = new TestStyleSheetRuntime({
-      styles: {
-        "hover:text-black": {
-          color: "black",
+test("styles change when atoms change", () => {
+  create({
+    "text-custom": {
+      styles: [
+        {
+          color: "custom",
         },
-      },
-      masks: {
-        "hover:text-black": HOVER,
-      },
-    });
-
-    expect(store.getTestStyle("hover:text-black")).toEqual([]);
-    expect(store.getTestStyle("hover:text-black", { hover: true })).toEqual([
-      { color: "black" },
-    ]);
+      ],
+    },
   });
 
-  test("can react to changes in atRules", () => {
-    const appearance = createTestAppearance();
+  const { result } = renderHook(() => useSync("text-custom"));
 
-    const store = new TestStyleSheetRuntime({
-      styles: {
-        "dark:text-black": { color: "black" },
-      },
-      appearance,
-      masks: {
-        "dark:text-black": DARK_MODE,
-      },
-      topics: {
-        "dark:text-black": ["colorScheme"],
+  const firstResult = result.current;
+
+  expect(firstResult.childClassNames).toBeUndefined();
+  expect(firstResult.styles).toEqual([{ color: "custom" }]);
+
+  act(() => {
+    create({
+      "text-custom": {
+        styles: [
+          {
+            color: "custom2",
+          },
+        ],
       },
     });
-
-    expect(store.getTestStyle("dark:text-black")).toEqual([]);
-    appearance.change({ colorScheme: "dark" });
-    expect(store.getTestStyle("dark:text-black")).toEqual([{ color: "black" }]);
-    appearance.change({ colorScheme: "light" });
-    expect(store.getTestStyle("dark:text-black")).toEqual([]);
   });
 
-  test("will only update the atRules styles", () => {
-    const staticText = { color: "white" };
-    const atRuleText = { color: "black" };
+  const secondResult = result.current;
 
-    const appearance = createTestAppearance();
+  expect(firstResult.styles).not.toBe(secondResult.styles);
+  expect(firstResult.childClassNames).toBe(secondResult.childClassNames);
 
-    const store = new TestStyleSheetRuntime({
-      styles: {
-        "text-white": staticText,
-        "dark:text-black": atRuleText,
-      },
-      masks: {
-        "dark:text-black": DARK_MODE,
-      },
-      topics: {
-        "dark:text-black": ["colorScheme"],
-      },
-      appearance,
+  expect(secondResult.childClassNames).toBeUndefined();
+  expect(secondResult.styles).toEqual([{ color: "custom2" }]);
+});
+
+test("dark:text-custom", () => {
+  create({
+    "dark:text-custom": {
+      styles: [
+        {
+          color: "custom",
+        },
+      ],
+      atRules: [[["colorScheme", "dark"]]],
+      topics: ["colorScheme"],
+    },
+  });
+
+  const { result } = renderHook(() => useSync("dark:text-custom"));
+
+  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.styles).toEqual([]);
+
+  act(() => NativeWindStyleSheet.setColorScheme("dark"));
+
+  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.styles).toEqual([{ color: "custom" }]);
+
+  act(() => NativeWindStyleSheet.toggleColorScheme());
+
+  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.styles).toEqual([]);
+});
+
+test("container", () => {
+  const spy = jest
+    .spyOn(Dimensions, "get")
+    .mockReturnValue({ width: 700, height: 1, scale: 1, fontScale: 1 });
+
+  create({
+    "text-custom": {
+      styles: [
+        {
+          color: "custom",
+        },
+      ],
+    },
+    container: {
+      styles: [{ width: "100%" }, { maxWidth: 640 }, { maxWidth: 760 }],
+      atRules: [
+        [],
+        [["media", "(min-width: 640px)"]],
+        [["media", "(min-width: 768px)"]],
+      ],
+      topics: ["width"],
+    },
+  });
+
+  const { result } = renderHook(() => useSync("text-custom container"));
+
+  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.styles).toEqual([
+    { color: "custom" },
+    { width: "100%" },
+    { maxWidth: 640 },
+  ]);
+
+  act(() => {
+    spy.mockReturnValue({ width: 800, height: 1, scale: 1, fontScale: 1 });
+    setDimensions(Dimensions);
+  });
+
+  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.styles).toEqual([
+    { color: "custom" },
+    { width: "100%" },
+    { maxWidth: 640 },
+    { maxWidth: 760 },
+  ]);
+});
+
+test("hover:text-custom", () => {
+  create({
+    "hover:text-custom": {
+      styles: [
+        {
+          color: "custom",
+        },
+      ],
+      conditions: ["hover"],
+    },
+  });
+
+  const conditions: Record<string, true> = {};
+
+  const { result, rerender } = renderHook(() => {
+    return useSync("hover:text-custom", conditions);
+  });
+
+  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.styles).toBeUndefined();
+
+  conditions.hover = true;
+  rerender();
+
+  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.styles).toEqual([{ color: "custom" }]);
+});
+
+test("gap-x-2", () => {
+  create({
+    "gap-x-2": {
+      styles: [{ marginLeft: -8 }],
+      childClasses: ["gap-x-2.children"],
+    },
+    "gap-x-2.children": {
+      styles: [{ marginLeft: 8 }],
+      conditions: ["notFirstChild"],
+    },
+  });
+
+  const { result } = renderHook(() => {
+    return useSync("gap-x-2");
+  });
+
+  expect(result.current.childClassNames).toEqual(["gap-x-2.children"]);
+  expect(result.current.styles).toEqual([{ marginLeft: -8 }]);
+
+  const { result: firstChild } = renderHook(() => {
+    return useSync("gap-x-2.children", {
+      nthChild: 0,
     });
-
-    expect(store.getTestStyle("text-white dark:text-black")).toEqual([
-      staticText,
-    ]);
-
-    appearance.change({ colorScheme: "dark" });
-
-    expect(store.getTestStyle("text-white dark:text-black")).toEqual([
-      staticText,
-      atRuleText,
-    ]);
   });
 
-  test("test", () => {
-    const atRuleText = { backgroundColor: "black" };
+  expect(firstChild.current.childClassNames).toBeUndefined();
+  expect(firstChild.current.styles).toBeUndefined();
 
-    const appearance = createTestAppearance();
-
-    const store = new TestStyleSheetRuntime({
-      styles: {
-        "dark:bg-black": atRuleText,
-      },
-      masks: {
-        "dark:bg-black": DARK_MODE,
-      },
-      topics: {
-        "dark:bg-black": ["colorScheme"],
-      },
-      appearance,
+  const { result: secondChild } = renderHook(() => {
+    return useSync("gap-x-2.children", {
+      nthChild: 1,
     });
-
-    expect(store.getTestStyle("dark:bg-black")).toEqual([]);
-
-    appearance.change({ colorScheme: "dark" });
-
-    expect(store.getTestStyle("text-white dark:bg-black")).toEqual([
-      atRuleText,
-    ]);
   });
 
-  // test("works with atomic styles which are a mix of static and dynamic values", () => {
-  //   const dimensions = createTestDimensions();
+  expect(secondChild.current.childClassNames).toBeUndefined();
+  expect(secondChild.current.styles).toEqual([{ marginLeft: 8 }]);
+});
 
-  //   const styles = {
-  //     [$`container`()]: {
-  //       width: "100%",
-  //     },
-  //     [$`container`({ atRuleIndex: 0 })]: {
-  //       maxWidth: 640,
-  //     },
-  //     [$`container`({ atRuleIndex: 1 })]: {
-  //       maxWidth: 768,
-  //     },
-  //   };
+test("dark:hover:gap-x-2", () => {
+  const className = "dark:hover:gap-x-2";
+  const childClassName = `${className}.children`;
 
-  //   const store = new TestStyleSheetStore({
-  //     styles,
-  //     atRules: {
-  //       [$`container`()]: [
-  //         [["media", "(min-width: 640px)"]],
-  //         [["media", "(min-width: 768px)"]],
-  //       ],
-  //     },
-  //     dimensions,
-  //   });
+  create({
+    [className]: {
+      styles: [{ marginLeft: -8 }],
+      childClasses: [childClassName],
+      conditions: ["hover"],
+      topics: ["colorScheme"],
+      atRules: [[["colorScheme", "dark"]]],
+    },
+    [childClassName]: {
+      styles: [{ marginLeft: 8 }],
+      conditions: ["notFirstChild"],
+      topics: ["colorScheme"],
+      atRules: [[["colorScheme", "dark"]]],
+    },
+  });
 
-  //   expect(store.getTestStyle("container")).toEqual([
-  //     styles[$`container`()],
-  //     styles[$`container`({ atRuleIndex: 0 })],
-  //   ]);
+  const conditions: Record<string, true> = {};
 
-  //   dimensions.change({
-  //     window: {
-  //       fontScale: 2,
-  //       height: 1334,
-  //       scale: 2,
-  //       width: 800,
-  //     },
-  //     screen: {
-  //       fontScale: 2,
-  //       height: 1334,
-  //       scale: 2,
-  //       width: 800,
-  //     },
-  //   });
+  const { result, rerender } = renderHook(() => {
+    return useSync(className, conditions);
+  });
 
-  //   expect(store.getStyle("container")).toBe(store.getStyle("container"));
+  const { result: childResult } = renderHook(() => {
+    return useSync(childClassName, {
+      nthChild: 1,
+    });
+  });
 
-  //   expect(store.getTestStyle("container")).toEqual([
-  //     styles[$`container`()],
-  //     styles[$`container`({ atRuleIndex: 0 })],
-  //     styles[$`container`({ atRuleIndex: 1 })],
-  //   ]);
-  // });
+  // No conditions are met, so everything is undefined
+  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.styles).toBeUndefined();
+  // Child matches its condition, but not the atRules so its just an empty array
+  expect(childResult.current.styles).toEqual([]);
 
-  // test("works with children styles", () => {
-  //   const store = new TestStyleSheetStore({
-  //     styles: {
-  //       [$`divide-solid`({ atRuleIndex: 0 })]: {
-  //         borderStyle: "solid",
-  //       },
-  //     },
-  //     atRules: {
-  //       [$`divide-solid`()]: [[["selector", "(> *:not(:first-child))"]]],
-  //     },
-  //   });
+  conditions.hover = true;
+  rerender();
 
-  //   const parent = store.getStyle("divide-solid");
-  //   const child1 = store.getChildStyles(parent, { nthChild: 1 });
-  //   const child2 = store.getChildStyles(parent, { nthChild: 2 });
+  // Hover conditions are met, but because atRules are not met, the styles are empty
+  // This will render styled children, but with no styles
+  expect(result.current.childClassNames).toEqual([childClassName]);
+  expect(result.current.styles).toEqual([]);
+  expect(childResult.current.styles).toEqual([]);
 
-  //   expect(child1).toEqual(undefined);
-  //   expect(child2).toEqual([{ borderStyle: "solid" }]);
-  // });
+  act(() => NativeWindStyleSheet.setColorScheme("dark"));
 
-  // test("works with children styles and atRules", () => {
-  //   const store = new TestStyleSheetStore({
-  //     styles: {
-  //       [$`hover:divide-solid`({ hover: true, atRuleIndex: 0 })]: {
-  //         borderStyle: "solid",
-  //       },
-  //     },
-  //     atRules: {
-  //       [$`hover:divide-solid`({ hover: true })]: [
-  //         [["selector", "(> *:not(:first-child))"]],
-  //       ],
-  //     },
-  //   });
-
-  //   const parent1 = store.getStyle("hover:divide-solid");
-  //   expect(parent1.childStyles).toBeFalsy();
-
-  //   const parent2 = store.getStyle("hover:divide-solid", { hover: true });
-  //   const child1 = store.getChildStyles(parent2, { nthChild: 1 });
-  //   const child2 = store.getChildStyles(parent2, { nthChild: 2 });
-
-  //   expect(child1).toEqual(undefined);
-  //   expect(child2).toEqual([{ borderStyle: "solid" }]);
-  // });
+  // Now we have matched both conditions and atRules, so we have styles
+  expect(result.current.childClassNames).toEqual([childClassName]);
+  expect(result.current.styles).toEqual([{ marginLeft: -8 }]);
+  expect(childResult.current.styles).toEqual([{ marginLeft: 8 }]);
 });
