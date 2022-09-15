@@ -1,6 +1,6 @@
-import { CustomPluginFunction } from "./types";
+import plugin from "tailwindcss/plugin";
 
-export const gap: CustomPluginFunction = ({ matchUtilities, theme }) => {
+export const gap = plugin(function ({ matchUtilities, theme }) {
   matchUtilities(
     {
       gap: (value: string) => {
@@ -47,4 +47,4 @@ export const gap: CustomPluginFunction = ({ matchUtilities, theme }) => {
     },
     { values: theme("gap") }
   );
-};
+});

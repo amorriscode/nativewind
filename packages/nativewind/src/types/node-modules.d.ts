@@ -47,3 +47,7 @@ declare module "tailwindcss/lib/util/flattenColorPalette" {
 declare module "tailwindcss/lib/util/toColorValue" {
   export default function (options: unknown): any;
 }
+
+declare module "tailwindcss/lib/util/isPlainObject" {
+  export default function (options: unknown): boolean;
+}

@@ -1,6 +1,6 @@
-import { CustomPluginFunction } from "./types";
+import plugin from "tailwindcss/plugin";
 
-export const scale: CustomPluginFunction = ({ matchUtilities, theme }) => {
+export const scale = plugin(function ({ matchUtilities, theme }) {
   matchUtilities(
     {
       scale(value: string) {
@@ -24,4 +24,4 @@ export const scale: CustomPluginFunction = ({ matchUtilities, theme }) => {
       supportsNegativeValues: true,
     }
   );
-};
+});

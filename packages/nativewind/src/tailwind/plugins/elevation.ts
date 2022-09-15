@@ -1,6 +1,6 @@
-import { CustomPluginFunction } from "./types";
+import plugin from "tailwindcss/plugin";
 
-export const elevation: CustomPluginFunction = ({ matchUtilities, theme }) => {
+export const elevation = plugin(function ({ matchUtilities, theme }) {
   matchUtilities(
     {
       elevation(value: string) {
@@ -13,4 +13,4 @@ export const elevation: CustomPluginFunction = ({ matchUtilities, theme }) => {
       values: theme("elevation"),
     }
   );
-};
+});

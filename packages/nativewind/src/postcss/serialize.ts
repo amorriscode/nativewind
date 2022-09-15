@@ -9,111 +9,27 @@ import {
   nullLiteral,
   numericLiteral,
   objectExpression,
-  ObjectProperty,
   objectProperty,
   stringLiteral,
   unaryExpression,
 } from "@babel/types";
-import { ExtractedValues } from "./plugin";
+import { CreateOptions } from "../style-sheet";
 
-export function serializer({
-  styles: rawStyles,
-  atRules,
-  masks,
-  units,
-  topics,
-  childClasses,
-  transforms,
-}: ExtractedValues) {
-  const serializedStyles: Record<string, Record<string, unknown>> = {};
-
-  for (const [key, style] of Object.entries(rawStyles)) {
-    serializedStyles[key] = {};
-
-    for (const [k, v] of Object.entries(style)) {
-      serializedStyles[key][k] = v;
-    }
-  }
-
-  const styles = babelSerializeLiteral(serializedStyles);
-
-  const objectProperties: ObjectProperty[] = [
-    objectProperty(identifier("styles"), styles),
-  ];
-
-  const raw: Partial<ExtractedValues> = {
-    styles: rawStyles,
-  };
-
-  if (Object.keys(atRules).length > 0) {
-    raw.atRules = atRules;
-    objectProperties.push(
-      objectProperty(identifier("atRules"), babelSerializeLiteral(atRules))
-    );
-  }
-
-  if (Object.keys(transforms).length > 0) {
-    raw.transforms = transforms;
-    objectProperties.push(
-      objectProperty(
-        identifier("transforms"),
-        babelSerializeLiteral(transforms)
-      )
-    );
-  }
-
-  if (Object.keys(masks).length > 0) {
-    raw.masks = masks;
-    objectProperties.push(
-      objectProperty(identifier("masks"), babelSerializeLiteral(masks))
-    );
-  }
-
-  if (Object.keys(topics).length > 0) {
-    raw.topics = topics;
-    objectProperties.push(
-      objectProperty(identifier("topics"), babelSerializeLiteral(topics))
-    );
-  }
-
-  if (Object.keys(units).length > 0) {
-    raw.units = units;
-    objectProperties.push(
-      objectProperty(identifier("units"), babelSerializeLiteral(units))
-    );
-  }
-
-  if (Object.keys(childClasses).length > 0) {
-    raw.childClasses = childClasses;
-    objectProperties.push(
-      objectProperty(
-        identifier("childClasses"),
-        babelSerializeLiteral(childClasses)
-      )
-    );
-  }
-
-  return {
-    raw,
-    hasStyles: Object.keys(rawStyles).length > 0,
-    stylesheetCreateExpression: callExpression(
-      memberExpression(
-        identifier("_NativeWindStyleSheet"),
-        identifier("create")
-      ),
-      [objectExpression(objectProperties)]
-    ),
-  };
+export function serializer(options: CreateOptions) {
+  return callExpression(
+    memberExpression(identifier("_NativeWindStyleSheet"), identifier("create")),
+    [babelSerializeLiteral(options)]
+  );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function babelSerializeLiteral(literal: any): Expression {
-  if (isExpression(literal)) {
-    return literal;
-  }
-
   if (literal === null) {
     return nullLiteral();
+  }
+
+  if (isExpression(literal)) {
+    return literal;
   }
 
   switch (typeof literal) {

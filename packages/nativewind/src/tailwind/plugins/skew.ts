@@ -1,6 +1,6 @@
-import { CustomPluginFunction } from "./types";
+import plugin from "tailwindcss/plugin";
 
-export const skew: CustomPluginFunction = ({ matchUtilities, theme }) => {
+export const skew = plugin(function ({ matchUtilities, theme }) {
   matchUtilities(
     {
       "skew-x"(value: string) {
@@ -19,4 +19,4 @@ export const skew: CustomPluginFunction = ({ matchUtilities, theme }) => {
       supportsNegativeValues: true,
     }
   );
-};
+});

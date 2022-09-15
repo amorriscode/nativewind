@@ -15,15 +15,22 @@ import themeFunctions from "./theme-functions";
 
 type Listener<T> = (state: T, oldState: T) => void;
 
+export type AtomStyle =
+  | Style
+  | {
+      [T: string]: { unit: string; value: string | number };
+    };
+
 export interface Atom {
-  styles: Style[];
-  atRules?: Array<Array<AtRuleTuple>>;
+  styles: AtomStyle[];
+  atRules?: Record<number, Array<AtRuleTuple>>;
   conditions?: string[];
   topics?: string[];
   topicSubscription?: () => void;
   childClasses?: string[];
   units?: Record<string, string>;
   transforms?: Record<string, true>;
+  context?: Record<string, true>;
 }
 
 const createSetter =
@@ -76,11 +83,7 @@ const setStyles = createSetter(
 const subscribeToStyles = createSubscriber(styleListeners);
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-let topicValues: Record<string, string | number> = {
-  platform: Platform.OS,
-  colorScheme: initialColorScheme(),
-  colorSchemeSystem: "system",
-};
+let topicValues: Record<string, string | number> = {};
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const topicValueListeners = new Set<Listener<typeof topicValues>>();
 const setTopicValues = createSetter(
@@ -111,10 +114,35 @@ export const NativeWindStyleSheet = {
     styleSetsListeners.clear();
     styles = {};
     styleListeners.clear();
-    topicValues = {};
+    topicValues = {
+      platform: Platform.OS,
+    };
     topicValueListeners.clear();
     setDimensions(Dimensions);
     setColorScheme("system");
+
+    // Add some default atoms. These no do not compile
+
+    atoms.set("group", {
+      styles: [],
+      context: {
+        group: true,
+      },
+    });
+
+    atoms.set("group-isolate", {
+      styles: [],
+      context: {
+        groupIsolate: true,
+      },
+    });
+
+    atoms.set("parent", {
+      styles: [],
+      context: {
+        parent: true,
+      },
+    });
   },
   isPreprocessed: () => isPreprocessed,
   setOutput: (
@@ -129,6 +157,7 @@ export const NativeWindStyleSheet = {
   setDangerouslyCompileStyles: (callback: typeof dangerouslyCompileStyles) =>
     (dangerouslyCompileStyles = callback),
 };
+NativeWindStyleSheet.reset();
 
 export type CreateOptions = Record<string, Atom>;
 
@@ -173,7 +202,7 @@ function evaluate(name: string, atom: Atom) {
   for (const [index, style] of atom.styles.entries()) {
     if (atom.units) {
       for (const [key, unit] of Object.entries(atom.units)) {
-        style[key as keyof Style] = unitRecord[unit](style[key as keyof Style]);
+        style[key] = unitRecord[unit](style[key]);
       }
     }
 
@@ -238,7 +267,7 @@ function useSync(
       let conditionsPass = true;
       for (const condition of atom.conditions) {
         switch (condition) {
-          case "notFirstChild":
+          case "not-first-child":
             conditionsPass =
               typeof componentState["nthChild"] === "number" &&
               componentState["nthChild"] > 0;
@@ -358,31 +387,27 @@ topicValueListeners.add((topics) => {
   }
 });
 
-function initialColorScheme() {
-  try {
-    if (typeof localStorage !== "undefined") {
-      const isDarkMode = window.matchMedia(
-        "(prefers-color-scheme: dark)"
-      ).matches;
+try {
+  if (typeof localStorage !== "undefined") {
+    const isDarkMode = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches;
 
-      const hasLocalStorageTheme = "nativewind_theme" in localStorage;
+    const hasLocalStorageTheme = "nativewind_theme" in localStorage;
 
-      if (
-        localStorage.nativewind_theme === "dark" ||
-        (!hasLocalStorageTheme && isDarkMode)
-      ) {
-        document.documentElement.classList.add("dark");
-        return "dark";
-      } else {
-        document.documentElement.classList.remove("dark");
-        return "light";
-      }
+    if (
+      localStorage.nativewind_theme === "dark" ||
+      (!hasLocalStorageTheme && isDarkMode)
+    ) {
+      document.documentElement.classList.add("dark");
+      setColorScheme("dark");
     } else {
-      return Appearance.getColorScheme() ?? "light";
+      document.documentElement.classList.remove("dark");
+      setColorScheme("light");
     }
-  } catch {
-    return Appearance.getColorScheme() ?? "light";
   }
+} catch {
+  // Do nothing
 }
 
 Appearance.addChangeListener(({ colorScheme }) => {
@@ -408,8 +433,6 @@ function setDimensions(dimensions: Dimensions) {
     });
   });
 }
-
-setDimensions(Dimensions);
 
 interface MatchAtRuleOptions {
   rule: string;

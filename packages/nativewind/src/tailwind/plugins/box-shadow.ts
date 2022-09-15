@@ -1,25 +1,24 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import plugin from "tailwindcss/plugin";
 import { getStylesForProperty } from "css-to-react-native";
 
-import { CustomPluginFunction } from "./types";
+export const boxShadow = plugin(function ({ addComponents, theme }) {
+  // matchUtilities(
+  //   {
+  //     "shadow-inner": notSupported("shadow-inner"),
+  //   },
+  //   { values: theme("boxShadow"), type: ["shadow"] }
+  // );
 
-export const boxShadow: CustomPluginFunction = (
-  { matchUtilities, theme, addComponents },
-  notSupported
-) => {
-  matchUtilities(
-    {
-      "shadow-inner": notSupported("shadow-inner"),
-    },
-    { values: theme("boxShadow"), type: ["shadow"] }
+  const themeValues = Object.entries(
+    theme("boxShadow") as Record<string, string>
   );
-
-  const themeValues = Object.entries(theme("boxShadow"));
-  const elevation = theme("elevation");
+  const elevation = theme("elevation") as Record<string, number>;
 
   const androidShadowComponents = themeValues.map(([size, value]) => ({
     "@media android": {
       [key(size)]: {
-        elevation: elevation[size],
+        elevation: elevation[size] as any,
         shadowColor: getStylesForProperty("boxShadow", value as string)
           .shadowColor,
       },
@@ -46,8 +45,8 @@ export const boxShadow: CustomPluginFunction = (
     androidShadowComponents,
     iosShadowComponents,
     webShadowComponents,
-  ]);
-};
+  ] as any);
+});
 
 const key = (size: string) => {
   return size === "DEFAULT" ? ".shadow" : `.shadow-${size}`;

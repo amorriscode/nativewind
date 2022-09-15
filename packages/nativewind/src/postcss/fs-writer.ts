@@ -14,11 +14,11 @@ import {
   variableDeclarator,
 } from "@babel/types";
 
-import { ExtractedValues } from "./plugin";
 import { serializer } from "./serialize";
+import { CreateOptions } from "../style-sheet";
 
-export function outputWriter(filename: string, values: ExtractedValues): void {
-  const { stylesheetCreateExpression } = serializer(values);
+export function outputWriter(filename: string, values: CreateOptions): void {
+  const stylesheetCreateExpression = serializer(values);
 
   const imports = variableDeclaration("const", [
     variableDeclarator(

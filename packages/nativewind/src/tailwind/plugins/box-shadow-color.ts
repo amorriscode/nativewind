@@ -1,12 +1,8 @@
+import plugin from "tailwindcss/plugin";
 import flattenColorPalette from "tailwindcss/lib/util/flattenColorPalette";
 import toColorValue from "tailwindcss/lib/util/toColorValue";
 
-import { CustomPluginFunction } from "./types";
-
-export const boxShadowColor: CustomPluginFunction = ({
-  matchUtilities,
-  theme,
-}) => {
+export const boxShadowColor = plugin(function ({ matchUtilities, theme }) {
   matchUtilities(
     {
       shadow: (value: unknown) => {
@@ -17,4 +13,4 @@ export const boxShadowColor: CustomPluginFunction = ({
     },
     { values: flattenColorPalette(theme("boxShadowColor")), type: ["color"] }
   );
-};
+});

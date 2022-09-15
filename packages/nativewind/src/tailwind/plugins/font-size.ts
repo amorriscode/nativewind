@@ -1,5 +1,5 @@
-import { PluginAPI } from "tailwindcss/types/config";
-import { isPlainObject } from "./utils";
+import plugin from "tailwindcss/plugin";
+import isPlainObject from "tailwindcss/lib/util/isPlainObject";
 
 /**
  * This "fixes" the fontSize plugin to calculate relative lineHeight's
@@ -9,7 +9,7 @@ import { isPlainObject } from "./utils";
  * { lineHeight: 1, fontSize: 12 } -> { lineHeight: 12, fontSize 12}
  * { lineHeight: 1px, fontSize: 12 } -> { lineHeight: 1px, fontSize 12}
  */
-export const fontSize = ({ matchUtilities, theme }: PluginAPI) => {
+export const fontSize = plugin(function ({ matchUtilities, theme }) {
   matchUtilities(
     {
       text: (value: unknown) => {
@@ -38,4 +38,4 @@ export const fontSize = ({ matchUtilities, theme }: PluginAPI) => {
       type: ["absolute-size", "relative-size", "length", "percentage"],
     }
   );
-};
+});

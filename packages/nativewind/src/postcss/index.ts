@@ -1,21 +1,55 @@
 import postcss, { PluginCreator } from "postcss";
 import calc from "postcss-calc";
-import postcssCssVariables from "postcss-css-variables";
 import postcssColorFunctionalNotation from "postcss-color-functional-notation";
-import postcssNested from "postcss-nested";
 
-import plugin, { PostcssPluginOptions } from "./plugin";
+import nativewind, { PostcssPluginOptions } from "./processor";
 
-const pluginPack: PluginCreator<PostcssPluginOptions> = (options) => {
-  return postcss([
-    postcssCssVariables(),
+import tailwind, { Config } from "tailwindcss";
+
+import { CreateOptions } from "../style-sheet";
+
+import { StyleError } from "../types/common";
+import { serializer } from "./serialize";
+
+export function extractStyles(
+  tailwindConfig: Config,
+  cssInput = "@tailwind components;@tailwind utilities;"
+) {
+  let errors: StyleError[] = [];
+
+  let output: CreateOptions = {};
+
+  const plugins = [
+    tailwind(tailwindConfig as Config),
+    ...getPlugins({
+      done: ({ errors: resultErrors, result }) => {
+        output = result;
+        errors = resultErrors;
+      },
+    }),
+  ];
+
+  postcss(plugins).process(cssInput).css;
+
+  return {
+    raw: output,
+    errors,
+    styleSheetExpression: serializer(output),
+  };
+}
+
+export function getPlugins(options?: PostcssPluginOptions) {
+  return [
     postcssColorFunctionalNotation(),
     calc({
       warnWhenCannotResolve: true,
     }),
-    postcssNested({ bubble: ["selector"] }),
-    plugin(options),
-  ]);
+    nativewind(options),
+  ];
+}
+
+const pluginPack: PluginCreator<PostcssPluginOptions> = (options) => {
+  return postcss(getPlugins(options));
 };
 
 pluginPack.postcss = true;

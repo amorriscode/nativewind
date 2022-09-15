@@ -1,6 +1,6 @@
-import { CustomPluginFunction } from "./types";
+import plugin from "tailwindcss/plugin";
 
-export const rotate: CustomPluginFunction = ({ matchUtilities, theme }) => {
+export const rotate = plugin(function ({ matchUtilities, theme }) {
   matchUtilities(
     {
       rotate(value: string) {
@@ -14,4 +14,4 @@ export const rotate: CustomPluginFunction = ({ matchUtilities, theme }) => {
       supportsNegativeValues: true,
     }
   );
-};
+});

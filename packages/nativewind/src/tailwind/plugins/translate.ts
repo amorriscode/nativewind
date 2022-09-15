@@ -1,6 +1,6 @@
-import { CustomPluginFunction } from "./types";
+import plugin from "tailwindcss/plugin";
 
-export const translate: CustomPluginFunction = ({ matchUtilities, theme }) => {
+export const translate = plugin(function ({ matchUtilities, theme }) {
   matchUtilities(
     {
       translate(value: string) {
@@ -24,4 +24,4 @@ export const translate: CustomPluginFunction = ({ matchUtilities, theme }) => {
       supportsNegativeValues: true,
     }
   );
-};
+});

@@ -52,12 +52,21 @@ const hasMacos = makePseudoClassTest("macos");
 const hasWeb = makePseudoClassTest("web");
 export const hasDarkPseudoClass = makePseudoClassTest("dark");
 
-export function normalizeCssSelector(selector: string) {
-  selector = selector.trim().replace(/^\.|\\/g, "");
-  selector = selector.split("::")[0];
-  selector = selector.split(" ").pop() as string;
+// export function normalizeCssSelector(selector: string) {
+//   selector = selector.trim().replace(/^\.|\\/g, "");
+//   selector = selector.split("::")[0];
+//   selector = selector.split(" ").pop() as string;
 
-  return selector;
+//   return selector;
+// }
+
+export function normalizeCssSelector(s: string) {
+  const [selector, ...pseudoClasses] = s
+    .trim()
+    .replace(/.+\\:/g, "")
+    .replace(/^\.|\\/g, "")
+    .split(":");
+  return { selector, pseudoClasses };
 }
 
 export interface StateBitOptions {

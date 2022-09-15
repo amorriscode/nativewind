@@ -1,6 +1,6 @@
 import { Dimensions } from "react-native";
 import { renderHook, act } from "@testing-library/react-hooks";
-import { NativeWindStyleSheet } from "../../src";
+import { NativeWindStyleSheet } from "../src";
 
 afterEach(() => {
   NativeWindStyleSheet.reset();
@@ -18,7 +18,9 @@ test("useSync is stable", () => {
   const { result } = renderHook(() => useSync("text-black font-400"));
 
   const firstResult = result.current;
-  act(() => {});
+  act(() => {
+    return;
+  });
   const secondResult = result.current;
 
   expect(firstResult.childClassNames).toBeUndefined();
@@ -182,7 +184,7 @@ test("gap-x-2", () => {
     },
     "gap-x-2.children": {
       styles: [{ marginLeft: 8 }],
-      conditions: ["notFirstChild"],
+      conditions: ["not-first-child"],
     },
   });
 
