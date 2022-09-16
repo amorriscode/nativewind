@@ -3,9 +3,9 @@ import { join, dirname, basename, resolve, sep, posix } from "node:path";
 import { readdirSync, lstatSync, existsSync } from "node:fs";
 import micromatch from "micromatch";
 
-import { VisitorState } from "../visitor";
-import { platforms } from "../../utils/platforms";
+import { platforms } from "../utils/platforms";
 import type { NodePath, types } from "@babel/core";
+import type { VisitorState } from "./index";
 
 const allowedIndexFiles: string[] = [];
 for (const platform of platforms) {

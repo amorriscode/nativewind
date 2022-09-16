@@ -9,16 +9,14 @@ import {
   ForwardRefExoticComponent,
   PropsWithoutRef,
   useContext,
+  useMemo,
 } from "react";
 import { NativeWindStyleSheet } from "../style-sheet";
 import { InteractionProps, useInteraction } from "./use-interaction";
-import { withStyledChildren } from "./with-styled-children";
 import { withStyledProps } from "./with-styled-props";
-import { useTailwind } from "./use-tailwind";
 import { StyleProp } from "react-native";
 import { GroupContext, IsolateGroupContext } from "./group-context";
 import { useComponentState } from "./use-component-state";
-import { GROUP, GROUP_ISO, matchesMask } from "../utils/selector";
 import { Style } from "../types/common";
 
 export interface StyledOptions<
@@ -119,7 +117,6 @@ export function styled<
   ) {
     const groupContext = useContext(GroupContext);
     const isolateGroupContext = useContext(IsolateGroupContext);
-    const preprocessed = NativeWindStyleSheet.isPreprocessed();
 
     const classNameWithDefaults = baseClassName
       ? `${baseClassName} ${twClassName ?? propClassName}`
@@ -133,15 +130,11 @@ export function styled<
     /**
      * Resolve the props/classProps/spreadProps options
      */
-    const {
-      styledProps,
-      mask: propsMask,
-      className,
-    } = withStyledProps<T, P, C>({
-      preprocessed,
+    const { styledProps, className } = withStyledProps<T, P, C>({
       className: classNameWithDefaults,
       propsToTransform,
       classProps,
+      componentState,
       componentProps: componentProps as unknown as Record<
         P | C | string,
         string
@@ -151,37 +144,29 @@ export function styled<
     /**
      * Resolve the className->style
      */
-    const [style, childClasses, styleMask] = useTailwind({
-      className,
-      inlineStyles,
-      preprocessed,
+    const { styles, meta = {} } = NativeWindStyleSheet.useSync(className, {
       ...componentState,
       ...groupContext,
       ...isolateGroupContext,
     });
 
-    const mask = styleMask | propsMask;
+    const style = useMemo(() => {
+      return [styles, inlineStyles].filter(Boolean) as Style;
+    }, [styles, inlineStyles]);
 
     /**
      * Determine if we need event handlers for our styles
      */
     const handlers = useInteraction(
       dispatch,
-      mask,
+      meta,
       componentProps as InteractionProps
     );
 
     /**
      * Resolve the child styles
      */
-    const children = withStyledChildren({
-      childClasses,
-      componentChildren,
-      mask,
-      parentActive: componentState.active,
-      parentFocus: componentState.focus,
-      parentHover: componentState.hover,
-    });
+    const children = componentChildren;
 
     /**
      * Pass the styles to the element
@@ -190,7 +175,7 @@ export function styled<
       ...componentProps,
       ...handlers,
       ...styledProps,
-      style: style,
+      style,
       children,
       ref,
     } as unknown as T);
@@ -198,7 +183,7 @@ export function styled<
     /**
      * Determine if we need to wrap element in Providers
      */
-    if (matchesMask(mask, GROUP)) {
+    if (meta.group) {
       reactNode = createElement(GroupContext.Provider, {
         children: reactNode,
         value: {
@@ -209,7 +194,7 @@ export function styled<
       });
     }
 
-    if (matchesMask(mask, GROUP_ISO)) {
+    if (meta.groupIsolated) {
       reactNode = createElement(IsolateGroupContext.Provider, {
         children: reactNode,
         value: {

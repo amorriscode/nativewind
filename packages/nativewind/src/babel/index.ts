@@ -1,22 +1,47 @@
-import { resolve, sep, posix } from "node:path";
-import { statSync } from "node:fs";
+import { resolve, sep, posix, join } from "node:path";
+import { statSync, mkdirSync } from "node:fs";
+
+import type { ConfigAPI, NodePath, PluginPass, Visitor } from "@babel/core";
+import { addNamed } from "@babel/helper-module-imports";
+import {
+  Expression,
+  identifier,
+  isJSXAttribute,
+  isJSXIdentifier,
+  isJSXMemberExpression,
+  isJSXSpreadAttribute,
+  jSXAttribute,
+  jsxClosingElement,
+  jsxElement,
+  JSXElement,
+  jsxExpressionContainer,
+  jsxIdentifier,
+  jSXIdentifier,
+  JSXIdentifier,
+  JSXMemberExpression,
+  JSXNamespacedName,
+  jsxOpeningElement,
+  JSXOpeningElement,
+  memberExpression,
+} from "@babel/types";
 
 import micromatch from "micromatch";
-
 import type { Config } from "tailwindcss";
 import resolveConfigPath from "tailwindcss/lib/util/resolveConfigPath";
 import resolveConfig from "tailwindcss/resolveConfig";
 import { validateConfig } from "tailwindcss/lib/util/validateConfig";
 
-import type { ConfigAPI, PluginPass, Visitor } from "@babel/core";
-import { addNamed } from "@babel/helper-module-imports";
+import { getImportBlockedComponents } from "./get-import-blocked-components";
+import { extractStyles } from "../postcss";
 
-import { extractStyles } from "../postcss/extract-styles";
-import { TailwindcssReactNativeBabelOptions } from "./types";
-import { visitor, VisitorState } from "./visitor";
-
-import { nativePlugin } from "../tailwind/native";
-import { expressionStatement } from "@babel/types";
+export interface TailwindcssReactNativeBabelOptions {
+  allowModuleTransform?: "*" | string[];
+  blockModuleTransform?: string[];
+  mode?: "compileAndTransform" | "compileOnly" | "transformOnly";
+  rem?: number;
+  tailwindConfigPath?: string;
+  tailwindConfig?: Config | undefined;
+}
 
 export default function (
   api: ConfigAPI,
@@ -33,13 +58,7 @@ export default function (
   let tailwindConfig: Config;
 
   if (userConfigPath === null) {
-    tailwindConfig = resolveConfig({
-      ...options.tailwindConfig,
-      plugins: [
-        nativePlugin(options),
-        ...(options?.tailwindConfig?.plugins ?? []),
-      ],
-    });
+    tailwindConfig = resolveConfig(options.tailwindConfig);
   } else {
     api.cache.using(() => statSync(userConfigPath).mtimeMs);
 
@@ -48,10 +67,7 @@ export default function (
     // eslint-disable-next-line @typescript-eslint/no-var-requires,unicorn/prefer-module
     const userConfig = require(userConfigPath);
 
-    const newConfig = resolveConfig({
-      ...userConfig,
-      plugins: [nativePlugin(options), ...(userConfig?.plugins ?? [])],
-    });
+    const newConfig = resolveConfig(userConfig);
 
     tailwindConfig = validateConfig(newConfig);
   }
@@ -73,6 +89,37 @@ export default function (
     ? ["react-native", "react-native-web", ...options.allowModuleTransform]
     : "*";
 
+  let canCompile = true;
+  let canTransform = true;
+
+  switch (options.mode) {
+    case "compileOnly": {
+      canTransform = false;
+      break;
+    }
+    case "transformOnly": {
+      canCompile = false;
+      break;
+    }
+  }
+
+  if (canCompile) {
+    const outputDirectory = resolve(
+      process.cwd(),
+      "node_modules/.cache/nativewind"
+    );
+    mkdirSync(outputDirectory, { recursive: true });
+
+    extractStyles({
+      ...tailwindConfig,
+      output: join(outputDirectory, "styles.js"),
+    });
+  }
+
+  if (!canTransform) {
+    return;
+  }
+
   const programVisitor: Visitor<
     PluginPass & {
       opts: TailwindcssReactNativeBabelOptions;
@@ -81,7 +128,6 @@ export default function (
     Program: {
       enter(projectPath, state) {
         const filename = state.filename;
-
         if (!filename) return;
 
         const isInContent = micromatch.isMatch(
@@ -93,59 +139,16 @@ export default function (
           return;
         }
 
-        let canCompile = true;
-        let canTransform = true;
-
-        switch (state.opts.mode) {
-          case "compileOnly": {
-            canTransform = false;
-            break;
-          }
-          case "transformOnly": {
-            canCompile = false;
-            break;
-          }
-        }
-
-        const visitorState: VisitorState = {
+        projectPath.traverse(visitor, {
           ...state,
-          rem: 16,
-          didTransform: false,
           canCompile,
           canTransform,
           filename,
           allowModuleTransform,
           allowRelativeModules: contentFilePaths,
-          blockList: new Set(),
+          blockList: new Set<string>(),
           tailwindConfig: tailwindConfig,
-        };
-
-        projectPath.traverse(visitor, visitorState);
-
-        const { didTransform } = visitorState;
-
-        if (didTransform) {
-          addNamed(projectPath, "StyledComponent", "nativewind");
-        }
-
-        if (!canCompile) return;
-
-        const output = extractStyles({
-          ...tailwindConfig,
-          content: [filename],
-          // If the file doesn't have any Tailwind styles, it will print a warning
-          // We force an empty style to prevent this
-          safelist: tailwindConfig.safelist ?? ["babel-empty"],
         });
-
-        if (!output.hasStyles) return;
-
-        projectPath.pushContainer(
-          "body",
-          expressionStatement(output.stylesheetCreateExpression)
-        );
-
-        addNamed(projectPath, "NativeWindStyleSheet", "nativewind");
       },
     },
   };
@@ -154,6 +157,59 @@ export default function (
     visitor: programVisitor,
   };
 }
+
+export interface VisitorState extends PluginPass {
+  opts: TailwindcssReactNativeBabelOptions;
+  filename: string;
+  allowModuleTransform: "*" | string[];
+  allowRelativeModules: "*" | string[];
+  blockList: Set<string>;
+}
+
+const visitor: Visitor<VisitorState> = {
+  ImportDeclaration(path, state) {
+    for (const component of getImportBlockedComponents(path, state)) {
+      state.blockList.add(component);
+    }
+  },
+  JSXElement: {
+    exit: (path, state) => {
+      const { blockList, canTransform } = state;
+
+      if (
+        isWrapper(path.node) ||
+        !canTransform ||
+        !someAttributes(path, ["className", "tw"])
+      ) {
+        return;
+      }
+
+      const name = getElementName(path.node.openingElement);
+
+      if (blockList.has(name) || name[0] !== name[0].toUpperCase()) {
+        return;
+      }
+
+      path.replaceWith(
+        jsxElement(
+          jsxOpeningElement(jsxIdentifier("_StyledComponent"), [
+            ...path.node.openingElement.attributes,
+            jSXAttribute(
+              jSXIdentifier("component"),
+              jsxExpressionContainer(
+                toExpression(path.node.openingElement.name)
+              )
+            ),
+          ]),
+          jsxClosingElement(jsxIdentifier("_StyledComponent")),
+          path.node.children
+        )
+      );
+
+      addNamed(path, "StyledComponent", "nativewind");
+    },
+  },
+};
 
 function normalizePath(filePath: string) {
   /**
@@ -164,4 +220,68 @@ function normalizePath(filePath: string) {
    * to do this the proper way
    */
   return filePath.split(sep).join(posix.sep);
+}
+
+function isWrapper(node: JSXElement) {
+  const nameNode = node.openingElement.name;
+  if (isJSXIdentifier(nameNode)) {
+    return (
+      nameNode.name === "_StyledComponent" ||
+      nameNode.name === "StyledComponent"
+    );
+  } else if (isJSXMemberExpression(nameNode)) {
+    return (
+      nameNode.property.name === "_StyledComponent" ||
+      nameNode.property.name === "StyledComponent"
+    );
+  } else {
+    return false;
+  }
+}
+
+function getElementName({ name }: JSXOpeningElement): string {
+  if (isJSXIdentifier(name)) {
+    return name.name;
+  } else if (isJSXMemberExpression(name)) {
+    return name.property.name;
+  } else {
+    // https://github.com/facebook/jsx/issues/13#issuecomment-54373080
+    throw new Error("JSXNamespacedName is not supported by React JSX");
+  }
+}
+
+function toExpression(
+  node: JSXIdentifier | JSXMemberExpression | JSXNamespacedName
+): Expression {
+  if (isJSXIdentifier(node)) {
+    return identifier(node.name);
+  } else if (isJSXMemberExpression(node)) {
+    return memberExpression(
+      toExpression(node.object),
+      toExpression(node.property)
+    );
+  } else {
+    // https://github.com/facebook/jsx/issues/13#issuecomment-54373080
+    throw new Error("JSXNamespacedName is not supported by React JSX");
+  }
+}
+
+function someAttributes(path: NodePath<JSXElement>, names: string[]) {
+  return path.node.openingElement.attributes.some((attribute) => {
+    /**
+     * I think we should be able to process spread attributes
+     * by checking their binding, but I still learning how this works
+     *
+     * If your reading this and understand Babel bindings please send a PR
+     */
+    if (isJSXSpreadAttribute(attribute)) {
+      return false;
+    }
+
+    return names.some((name) => {
+      return (
+        isJSXAttribute(attribute) && isJSXIdentifier(attribute.name, { name })
+      );
+    });
+  });
 }

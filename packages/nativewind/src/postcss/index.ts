@@ -1,57 +1,38 @@
-import postcss, { PluginCreator } from "postcss";
+import postcss from "postcss";
 import calc from "postcss-calc";
 import postcssColorFunctionalNotation from "postcss-color-functional-notation";
-
-import nativewind, { PostcssPluginOptions } from "./processor";
+import { walk, parse } from "css-tree";
 
 import tailwind, { Config } from "tailwindcss";
 
 import { CreateOptions } from "../style-sheet";
 
-import { StyleError } from "../types/common";
 import { serializer } from "./serialize";
+import { toCreateOptions } from "./to-create-options";
 
 export function extractStyles(
   tailwindConfig: Config,
   cssInput = "@tailwind components;@tailwind utilities;"
 ) {
-  let errors: StyleError[] = [];
+  let createOptions: CreateOptions = {};
 
-  let output: CreateOptions = {};
-
-  const plugins = [
-    tailwind(tailwindConfig as Config),
-    ...getPlugins({
-      done: ({ errors: resultErrors, result }) => {
-        output = result;
-        errors = resultErrors;
-      },
-    }),
-  ];
-
-  postcss(plugins).process(cssInput).css;
-
-  return {
-    raw: output,
-    errors,
-    styleSheetExpression: serializer(output),
-  };
-}
-
-export function getPlugins(options?: PostcssPluginOptions) {
-  return [
+  const tailwindOutput = postcss([
+    tailwind(tailwindConfig),
     postcssColorFunctionalNotation(),
     calc({
       warnWhenCannotResolve: true,
     }),
-    nativewind(options),
-  ];
+  ]).process(cssInput).css;
+
+  walk(parse(tailwindOutput), (node) => {
+    createOptions = {
+      ...createOptions,
+      ...toCreateOptions(node),
+    };
+  });
+
+  return {
+    raw: createOptions,
+    styleSheetExpression: serializer(createOptions),
+  };
 }
-
-const pluginPack: PluginCreator<PostcssPluginOptions> = (options) => {
-  return postcss(getPlugins(options));
-};
-
-pluginPack.postcss = true;
-
-export default pluginPack;

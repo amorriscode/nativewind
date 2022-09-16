@@ -1,30 +1,32 @@
 import type { StyledOptions } from ".";
-import { useTailwind } from "./use-tailwind";
+import { NativeWindStyleSheet } from "../style-sheet";
+import { ComponentState } from "./use-component-state";
 
 export interface WithStyledPropsOptions<
   T,
   P extends keyof T,
   C extends keyof T
 > {
-  preprocessed: boolean;
   className: string;
   propsToTransform?: StyledOptions<T, P, C>["props"];
   componentProps: Record<P | C | string, string>;
+  componentState: ComponentState;
   classProps?: C[];
 }
 
 export function withStyledProps<T, P extends keyof T, C extends keyof T>({
   propsToTransform,
   componentProps,
+  componentState,
   classProps,
-  preprocessed,
   className,
 }: WithStyledPropsOptions<T, P, C>) {
   const styledProps: Partial<Record<P | C, unknown>> = {};
-  let mask = 0;
+
+  const isPreprocessed = NativeWindStyleSheet.isPreprocessed();
 
   if (classProps) {
-    if (preprocessed) {
+    if (isPreprocessed) {
       for (const prop of classProps) {
         styledProps[prop] = undefined;
         className += ` ${componentProps[prop]}`;
@@ -32,46 +34,36 @@ export function withStyledProps<T, P extends keyof T, C extends keyof T>({
     } else {
       for (const prop of classProps) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const [style, , styleMask] = useTailwind({
-          className: componentProps[prop],
+        const { styles } = NativeWindStyleSheet.useSync(componentProps[prop], {
+          ...componentState,
           flatten: true,
-          preprocessed,
         });
-
-        if (styleMask) {
-          mask |= styleMask;
-        }
 
         Object.assign(
           styledProps,
           { [prop]: undefined },
-          Array.isArray(style) ? style[0] : style
+          Array.isArray(styles) ? styles[0] : styles
         );
       }
     }
   }
 
-  if (propsToTransform && !preprocessed) {
+  if (propsToTransform && !isPreprocessed) {
     for (const [prop, styleKey] of Object.entries(propsToTransform)) {
-      const [style, , styleMask] = useTailwind({
-        className: componentProps[prop],
+      const { styles } = NativeWindStyleSheet.useSync(componentProps[prop], {
+        ...componentState,
         flatten: styleKey !== true,
-        preprocessed,
       });
 
-      if (styleMask) {
-        mask |= styleMask;
-      }
-
       if (typeof styleKey === "boolean") {
-        styledProps[prop as P | C] = style;
+        styledProps[prop as P | C] = styles;
       } else {
-        const firstStyle = Array.isArray(style) ? style[0] : style;
+        const firstStyle = Array.isArray(styles) ? styles[0] : styles;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         styledProps[prop as P | C] = (firstStyle as any)[styleKey as any];
       }
     }
   }
 
-  return { styledProps, mask, className };
+  return { styledProps, className };
 }

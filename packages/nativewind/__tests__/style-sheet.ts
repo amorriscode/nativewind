@@ -1,6 +1,8 @@
 import { Dimensions } from "react-native";
 import { renderHook, act } from "@testing-library/react-hooks";
 import { NativeWindStyleSheet } from "../src";
+import { extractStyles } from "../src/postcss";
+import nativePreset from "../src/tailwind/native-preset";
 
 afterEach(() => {
   NativeWindStyleSheet.reset();
@@ -8,6 +10,16 @@ afterEach(() => {
 });
 
 const { create, useSync, setDimensions } = NativeWindStyleSheet;
+
+function createClass(className: string) {
+  const { raw } = extractStyles({
+    content: [],
+    safelist: [className],
+    presets: [nativePreset],
+  });
+
+  return create(raw);
+}
 
 test("useSync is stable", () => {
   create({
@@ -23,14 +35,14 @@ test("useSync is stable", () => {
   });
   const secondResult = result.current;
 
-  expect(firstResult.childClassNames).toBeUndefined();
+  expect(firstResult.childClasses).toBeUndefined();
   expect(firstResult.styles).toEqual([
     { color: "black" },
     { fontWeight: "400" },
   ]);
 
   expect(firstResult.styles).toBe(secondResult.styles);
-  expect(firstResult.childClassNames).toBe(secondResult.childClassNames);
+  expect(firstResult.childClasses).toBe(secondResult.childClasses);
 });
 
 test("styles change when atoms change", () => {
@@ -48,7 +60,7 @@ test("styles change when atoms change", () => {
 
   const firstResult = result.current;
 
-  expect(firstResult.childClassNames).toBeUndefined();
+  expect(firstResult.childClasses).toBeUndefined();
   expect(firstResult.styles).toEqual([{ color: "custom" }]);
 
   act(() => {
@@ -66,10 +78,35 @@ test("styles change when atoms change", () => {
   const secondResult = result.current;
 
   expect(firstResult.styles).not.toBe(secondResult.styles);
-  expect(firstResult.childClassNames).toBe(secondResult.childClassNames);
+  expect(firstResult.childClasses).toBe(secondResult.childClasses);
 
-  expect(secondResult.childClassNames).toBeUndefined();
+  expect(secondResult.childClasses).toBeUndefined();
   expect(secondResult.styles).toEqual([{ color: "custom2" }]);
+});
+
+test.only("text-[color:hsl(var(--custom))]", () => {
+  NativeWindStyleSheet.setCustomProperties({
+    "--custom": "360, 100%, 100%",
+  });
+  createClass("text-[color:hsl(var(--custom))]");
+
+  const { result } = renderHook(() =>
+    useSync("text-[color:hsl(var(--custom))]")
+  );
+
+  console.log(result.current);
+  // expect(result.current.childClasses).toBeUndefined();
+  // expect(result.current.styles).toEqual([]);
+
+  // act(() => NativeWindStyleSheet.setColorScheme("dark"));
+
+  // expect(result.current.childClasses).toBeUndefined();
+  // expect(result.current.styles).toEqual([{ color: "custom" }]);
+
+  // act(() => NativeWindStyleSheet.toggleColorScheme());
+
+  // expect(result.current.childClasses).toBeUndefined();
+  // expect(result.current.styles).toEqual([]);
 });
 
 test("dark:text-custom", () => {
@@ -87,17 +124,17 @@ test("dark:text-custom", () => {
 
   const { result } = renderHook(() => useSync("dark:text-custom"));
 
-  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.childClasses).toBeUndefined();
   expect(result.current.styles).toEqual([]);
 
   act(() => NativeWindStyleSheet.setColorScheme("dark"));
 
-  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.childClasses).toBeUndefined();
   expect(result.current.styles).toEqual([{ color: "custom" }]);
 
   act(() => NativeWindStyleSheet.toggleColorScheme());
 
-  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.childClasses).toBeUndefined();
   expect(result.current.styles).toEqual([]);
 });
 
@@ -127,7 +164,7 @@ test("container", () => {
 
   const { result } = renderHook(() => useSync("text-custom container"));
 
-  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.childClasses).toBeUndefined();
   expect(result.current.styles).toEqual([
     { color: "custom" },
     { width: "100%" },
@@ -139,7 +176,7 @@ test("container", () => {
     setDimensions(Dimensions);
   });
 
-  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.childClasses).toBeUndefined();
   expect(result.current.styles).toEqual([
     { color: "custom" },
     { width: "100%" },
@@ -166,13 +203,13 @@ test("hover:text-custom", () => {
     return useSync("hover:text-custom", conditions);
   });
 
-  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.childClasses).toBeUndefined();
   expect(result.current.styles).toBeUndefined();
 
   conditions.hover = true;
   rerender();
 
-  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.childClasses).toBeUndefined();
   expect(result.current.styles).toEqual([{ color: "custom" }]);
 });
 
@@ -192,7 +229,7 @@ test("gap-x-2", () => {
     return useSync("gap-x-2");
   });
 
-  expect(result.current.childClassNames).toEqual(["gap-x-2.children"]);
+  expect(result.current.childClasses).toEqual(["gap-x-2.children"]);
   expect(result.current.styles).toEqual([{ marginLeft: -8 }]);
 
   const { result: firstChild } = renderHook(() => {
@@ -201,7 +238,7 @@ test("gap-x-2", () => {
     });
   });
 
-  expect(firstChild.current.childClassNames).toBeUndefined();
+  expect(firstChild.current.childClasses).toBeUndefined();
   expect(firstChild.current.styles).toBeUndefined();
 
   const { result: secondChild } = renderHook(() => {
@@ -210,7 +247,7 @@ test("gap-x-2", () => {
     });
   });
 
-  expect(secondChild.current.childClassNames).toBeUndefined();
+  expect(secondChild.current.childClasses).toBeUndefined();
   expect(secondChild.current.styles).toEqual([{ marginLeft: 8 }]);
 });
 
@@ -247,7 +284,7 @@ test("dark:hover:gap-x-2", () => {
   });
 
   // No conditions are met, so everything is undefined
-  expect(result.current.childClassNames).toBeUndefined();
+  expect(result.current.childClasses).toBeUndefined();
   expect(result.current.styles).toBeUndefined();
   // Child matches its condition, but not the atRules so its just an empty array
   expect(childResult.current.styles).toEqual([]);
@@ -257,14 +294,14 @@ test("dark:hover:gap-x-2", () => {
 
   // Hover conditions are met, but because atRules are not met, the styles are empty
   // This will render styled children, but with no styles
-  expect(result.current.childClassNames).toEqual([childClassName]);
+  expect(result.current.childClasses).toEqual([childClassName]);
   expect(result.current.styles).toEqual([]);
   expect(childResult.current.styles).toEqual([]);
 
   act(() => NativeWindStyleSheet.setColorScheme("dark"));
 
   // Now we have matched both conditions and atRules, so we have styles
-  expect(result.current.childClassNames).toEqual([childClassName]);
+  expect(result.current.childClasses).toEqual([childClassName]);
   expect(result.current.styles).toEqual([{ marginLeft: -8 }]);
   expect(childResult.current.styles).toEqual([{ marginLeft: 8 }]);
 });

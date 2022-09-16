@@ -8,7 +8,6 @@ import {
 import { properties } from "./properties";
 import { isInvalidProperty } from "./is-invalid-property";
 import { StyleError } from "../../types/common";
-import { AtomStyle } from "../../style-sheet";
 
 export interface ToReactNativeOptions {
   onError: (options: StyleError) => void;
@@ -63,5 +62,5 @@ export function toReactNative(
     return;
   }
 
-  return styles as AtomStyle;
+  return styles;
 }

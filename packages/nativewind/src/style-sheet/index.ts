@@ -15,22 +15,25 @@ import themeFunctions from "./theme-functions";
 
 type Listener<T> = (state: T, oldState: T) => void;
 
-export type AtomStyle =
-  | Style
-  | {
-      [T: string]: { unit: string; value: string | number };
-    };
+export type AtomStyle = {
+  [T in keyof Style]: Style[T] | StyleWithUnits<T>;
+};
+
+type StyleWithUnits<T extends keyof Style> = {
+  units: string[];
+  value: Style[T] | string;
+};
 
 export interface Atom {
   styles: AtomStyle[];
   atRules?: Record<number, Array<AtRuleTuple>>;
   conditions?: string[];
+  customProperties?: string[];
   topics?: string[];
   topicSubscription?: () => void;
   childClasses?: string[];
-  units?: Record<string, string>;
   transforms?: Record<string, true>;
-  context?: Record<string, true>;
+  meta?: Record<string, true>;
 }
 
 const createSetter =
@@ -57,8 +60,12 @@ const createSubscriber =
     return () => listeners.delete(listener);
   };
 
+// eslint-disable-next-line unicorn/no-useless-undefined
+let dimensionsListener: EmitterSubscription | undefined = undefined;
+
 const atoms: Map<string, Atom> = new Map();
-const childClassNames: Map<string, string[]> = new Map();
+const childClasses: Map<string, string[]> = new Map();
+const styleMeta: Map<string, Record<string, boolean>> = new Map();
 
 let styleSets: Record<string, Style[]> = {};
 const styleSetsListeners = new Set<Listener<typeof styleSets>>();
@@ -109,7 +116,7 @@ export const NativeWindStyleSheet = {
   useSync,
   reset: () => {
     atoms.clear();
-    childClassNames.clear();
+    childClasses.clear();
     styleSets = {};
     styleSetsListeners.clear();
     styles = {};
@@ -125,21 +132,21 @@ export const NativeWindStyleSheet = {
 
     atoms.set("group", {
       styles: [],
-      context: {
+      meta: {
         group: true,
       },
     });
 
     atoms.set("group-isolate", {
       styles: [],
-      context: {
+      meta: {
         groupIsolate: true,
       },
     });
 
     atoms.set("parent", {
       styles: [],
-      context: {
+      meta: {
         parent: true,
       },
     });
@@ -153,6 +160,7 @@ export const NativeWindStyleSheet = {
   getColorScheme,
   setColorScheme,
   toggleColorScheme,
+  setCustomProperties,
   setDimensions,
   setDangerouslyCompileStyles: (callback: typeof dangerouslyCompileStyles) =>
     (dangerouslyCompileStyles = callback),
@@ -164,32 +172,32 @@ export type CreateOptions = Record<string, Atom>;
 function create(options: CreateOptions) {
   if (isPreprocessed) {
     return;
-  } else {
-    const newStyles: Record<string, Style[]> = {};
+  }
 
-    for (const [atomName, atom] of Object.entries(options)) {
-      if (atom.topics) {
-        atom.topicSubscription = subscribeToTopics((values, oldValues) => {
-          const topicChanged = atom.topics?.some((topic) => {
-            return values[topic] !== oldValues[topic];
-          });
+  let newStyles: Record<string, Style[] | undefined> = {};
 
-          if (!topicChanged) {
-            return;
-          }
-
-          setStyles(evaluate(atomName, atom));
+  for (const [atomName, atom] of Object.entries(options)) {
+    if (atom.topics) {
+      atom.topicSubscription = subscribeToTopics((values, oldValues) => {
+        const topicChanged = atom.topics?.some((topic) => {
+          return values[topic] !== oldValues[topic];
         });
-      }
 
-      // Remove any existing subscriptions
-      atoms.get(atomName)?.topicSubscription?.();
-      atoms.set(atomName, atom);
-      Object.assign(newStyles, evaluate(atomName, atom));
+        if (!topicChanged) {
+          return;
+        }
+
+        setStyles(evaluate(atomName, atom));
+      });
     }
 
-    setStyles(newStyles);
+    // Remove any existing subscriptions
+    atoms.get(atomName)?.topicSubscription?.();
+    atoms.set(atomName, atom);
+    newStyles = { ...newStyles, ...evaluate(atomName, atom) };
   }
+
+  setStyles(newStyles);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -197,19 +205,27 @@ const unitRecord: Record<string, (...options: any[]) => any> = {};
 
 function evaluate(name: string, atom: Atom) {
   const atomStyles: Style[] = [];
-  const newStyles: Record<string, Style[] | undefined> = { [name]: atomStyles };
+  let newStyles: Record<string, Style[] | undefined> = {
+    [name]: atomStyles,
+  };
 
-  for (const [index, style] of atom.styles.entries()) {
-    if (atom.units) {
-      for (const [key, unit] of Object.entries(atom.units)) {
-        style[key] = unitRecord[unit](style[key]);
+  for (const [index, originalStyles] of atom.styles.entries()) {
+    const styles = { ...originalStyles } as Style;
+
+    for (const [key, value] of Object.entries(originalStyles)) {
+      let newValue = value;
+      if (isStyleWithUnits(value)) {
+        for (const unit of value.units) {
+          newValue = unitRecord[unit](value);
+        }
+        (styles as Record<string, unknown>)[key] = newValue;
       }
     }
 
     const atRules = atom.atRules?.[index];
 
     if (!atRules || atRules.length === 0) {
-      atomStyles.push(style);
+      atomStyles.push(styles);
       continue;
     }
 
@@ -232,15 +248,20 @@ function evaluate(name: string, atom: Atom) {
     });
 
     if (atRulesResult) {
-      atomStyles.push(style);
+      // All atRules matches, so add the style
+      atomStyles.push(styles);
 
+      // If there are children also add them.
       if (atom.childClasses) {
         for (const child of atom.childClasses) {
-          const childStyles = atoms.get("child")?.styles;
-          if (childStyles) newStyles[child] = childStyles;
+          const childAtom = atoms.get(child);
+          if (childAtom) {
+            newStyles = { ...newStyles, ...evaluate(child, childAtom) };
+          }
         }
       }
     } else {
+      // If there are children also add them.
       if (atom.childClasses) {
         for (const child of atom.childClasses) {
           newStyles[child] = undefined;
@@ -257,6 +278,7 @@ function useSync(
   componentState: Record<string, boolean | number> = {}
 ) {
   const keyTokens: string[] = [];
+  const conditions = new Set<string>();
 
   for (const atomName of className.split(/\s+/)) {
     const atom = atoms.get(atomName);
@@ -266,28 +288,28 @@ function useSync(
     if (atom.conditions) {
       let conditionsPass = true;
       for (const condition of atom.conditions) {
-        switch (condition) {
-          case "not-first-child":
-            conditionsPass =
-              typeof componentState["nthChild"] === "number" &&
-              componentState["nthChild"] > 0;
-            break;
-          case "odd":
-            conditionsPass =
-              typeof componentState["nthChild"] === "number" &&
-              componentState["nthChild"] % 2 === 1;
-            break;
-          case "even":
-            conditionsPass =
-              typeof componentState["nthChild"] === "number" &&
-              componentState["nthChild"] % 2 === 0;
-            break;
-          default:
-            conditionsPass = !!componentState[condition];
-        }
+        conditions.add(condition);
 
-        if (!conditionsPass) {
-          break;
+        if (conditionsPass) {
+          switch (condition) {
+            case "not-first-child":
+              conditionsPass =
+                typeof componentState["nthChild"] === "number" &&
+                componentState["nthChild"] > 0;
+              break;
+            case "odd":
+              conditionsPass =
+                typeof componentState["nthChild"] === "number" &&
+                componentState["nthChild"] % 2 === 1;
+              break;
+            case "even":
+              conditionsPass =
+                typeof componentState["nthChild"] === "number" &&
+                componentState["nthChild"] % 2 === 0;
+              break;
+            default:
+              conditionsPass = !!componentState[condition];
+          }
         }
       }
 
@@ -314,7 +336,9 @@ function useSync(
 
   return {
     styles: currentStyles,
-    childClassNames: childClassNames.get(key),
+    childClasses: childClasses.get(key),
+    meta: styleMeta.get(key),
+    conditions,
   };
 }
 
@@ -346,7 +370,7 @@ function warmCache(tokenSets: Array<string[]>) {
     });
 
     if (children.length > 0) {
-      childClassNames.set(key, children);
+      childClasses.set(key, children);
     }
   }
 }
@@ -363,6 +387,12 @@ function setColorScheme(system?: ColorSchemeName | "system" | null) {
         ? Appearance.getColorScheme() || "light"
         : system,
   });
+}
+
+function setCustomProperties(
+  properties: Record<`--${string}`, string | number>
+) {
+  setTopicValues(properties);
 }
 
 function toggleColorScheme() {
@@ -414,7 +444,6 @@ Appearance.addChangeListener(({ colorScheme }) => {
   setColorScheme(colorScheme);
 });
 
-let dimensionsListener: EmitterSubscription | undefined;
 function setDimensions(dimensions: Dimensions) {
   dimensionsListener?.remove();
 
@@ -463,4 +492,10 @@ function matchAtRule({
   }
 
   return false;
+}
+
+function isStyleWithUnits<T extends keyof Style>(
+  style: Style[T] | StyleWithUnits<T>
+): style is StyleWithUnits<T> {
+  return typeof style === "object" && "units" in style;
 }
