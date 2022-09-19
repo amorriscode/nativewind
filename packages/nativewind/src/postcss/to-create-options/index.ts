@@ -1,5 +1,6 @@
 import { CssNode } from "css-tree";
 
-export function toCreateOptions(_node: CssNode) {
+export function toCreateOptions(node: CssNode) {
+  console.log(node);
   return {};
 }

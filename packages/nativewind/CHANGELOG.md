@@ -1,5 +1,17 @@
 # nativewind
 
+## 2.0.10
+
+### Patch Changes
+
+- 1986508: fix: unable to find styles console warning
+
+## 2.0.9
+
+### Patch Changes
+
+- 2b74fa9: fix: stop compiling styles during mode:transformOnly
+
 ## 2.0.8
 
 ### Patch Changes

@@ -3,6 +3,7 @@ import {
   ColorSchemeName,
   Dimensions,
   EmitterSubscription,
+  I18nManager,
   Platform,
   PlatformOSType,
   StyleSheet,
@@ -127,6 +128,7 @@ export const NativeWindStyleSheet = {
     topicValueListeners.clear();
     setDimensions(Dimensions);
     setColorScheme("system");
+    setDirection(I18nManager.isRTL ? "rtl" : "ltr");
 
     // Add some default atoms. These no do not compile
 
@@ -159,6 +161,7 @@ export const NativeWindStyleSheet = {
   ) => (isPreprocessed = Platform.select(specifics) === "css"),
   getColorScheme,
   setColorScheme,
+  setDirection,
   toggleColorScheme,
   setCustomProperties,
   setDimensions,
@@ -240,9 +243,9 @@ function evaluate(name: string, atom: Atom) {
         return matchAtRule({
           rule,
           params,
-          width: topicValues["width"] as number,
-          height: topicValues["height"] as number,
-          orientation: topicValues["orientation"] as OrientationLockType,
+          width: topicValues["device-width"] as number,
+          height: topicValues["device-height"] as number,
+          orientation: topicValues["device-orientation"] as OrientationLockType,
         });
       }
     });
@@ -389,6 +392,12 @@ function setColorScheme(system?: ColorSchemeName | "system" | null) {
   });
 }
 
+function setDirection(direction: "ltr" | "rtl") {
+  setTopicValues({
+    i18nDirection: direction,
+  });
+}
+
 function setCustomProperties(
   properties: Record<`--${string}`, string | number>
 ) {
@@ -449,16 +458,18 @@ function setDimensions(dimensions: Dimensions) {
 
   const window = dimensions.get("window");
   setTopicValues({
-    width: window.width,
-    height: window.height,
-    orientation: window.width > window.height ? "landscape" : "portrait",
+    "device-width": window.width,
+    "device-height": window.height,
+    "device-orientation":
+      window.width > window.height ? "landscape" : "portrait",
   });
 
   dimensionsListener = dimensions.addEventListener("change", ({ window }) => {
     setTopicValues({
-      width: window.width,
-      height: window.height,
-      orientation: window.width > window.height ? "landscape" : "portrait",
+      "device-width": window.width,
+      "device-height": window.height,
+      "device-orientation":
+        window.width > window.height ? "landscape" : "portrait",
     });
   });
 }
