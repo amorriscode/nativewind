@@ -14,8 +14,8 @@ import {
   variableDeclarator,
 } from "@babel/types";
 
-import { serializer } from "./serialize";
 import { CreateOptions } from "../style-sheet";
+import { serializer } from "./serialize";
 
 export function outputWriter(filename: string, values: CreateOptions): void {
   const stylesheetCreateExpression = serializer(values);

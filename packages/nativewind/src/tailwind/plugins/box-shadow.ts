@@ -1,53 +1,40 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import plugin from "tailwindcss/plugin";
-import { getStylesForProperty } from "css-to-react-native";
+import { CSSRuleObject } from "tailwindcss/types/config";
 
 export const boxShadow = plugin(function ({ addComponents, theme }) {
-  // matchUtilities(
-  //   {
-  //     "shadow-inner": notSupported("shadow-inner"),
-  //   },
-  //   { values: theme("boxShadow"), type: ["shadow"] }
-  // );
-
   const themeValues = Object.entries(
     theme("boxShadow") as Record<string, string>
   );
   const elevation = theme("elevation") as Record<string, number>;
 
-  const androidShadowComponents = themeValues.map(([size, value]) => ({
-    "@media android": {
-      [key(size)]: {
-        elevation: elevation[size] as any,
-        shadowColor: getStylesForProperty("boxShadow", value as string)
-          .shadowColor,
-      },
-    },
-  }));
+  const components: CSSRuleObject[] = [];
 
-  const iosShadowComponents = themeValues.map(([size, value]) => ({
-    "@media ios": {
-      [key(size)]: {
-        boxShadow: value,
-      },
-    },
-  }));
+  for (const [size, value] of themeValues) {
+    components.push({
+      "@media (platform: android)": {
+        [key(size)]: {
+          elevation: elevation[size] as any,
+          shadowColor: getColor(value),
+        },
+      } as CSSRuleObject,
+      "@media (platform: ios)": {
+        [key(size)]: {
+          boxShadow: value,
+        },
+      } as CSSRuleObject,
+    });
+  }
 
-  const webShadowComponents = themeValues.map(([size, value]) => ({
-    "@media web": {
-      [key(size)]: {
-        boxShadow: value,
-      },
-    },
-  }));
-
-  addComponents([
-    androidShadowComponents,
-    iosShadowComponents,
-    webShadowComponents,
-  ] as any);
+  addComponents(components);
 });
 
-const key = (size: string) => {
+function key(size: string) {
   return size === "DEFAULT" ? ".shadow" : `.shadow-${size}`;
-};
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function getColor(_: string) {
+  // TODO
+  return "black";
+}

@@ -10,7 +10,7 @@ export type StyleProp = Style | RecursiveArray<Style>;
 export type StyleRecord = Record<string, Style>;
 export type MediaRecord = Record<string, Array<AtRuleTuple[]>>;
 
-export type AtRuleTuple = [string, string | undefined];
+export type AtRuleTuple = [string] | [string, string | number];
 
 export interface AtRuleRecord extends Style {
   atRules: AtRuleTuple[];

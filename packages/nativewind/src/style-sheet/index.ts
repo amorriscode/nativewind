@@ -17,12 +17,12 @@ import themeFunctions from "./theme-functions";
 type Listener<T> = (state: T, oldState: T) => void;
 
 export type AtomStyle = {
-  [T in keyof Style]: Style[T] | StyleWithUnits<T>;
+  [T in keyof Style]: Style[T] | StyleWithFunction;
 };
 
-type StyleWithUnits<T extends keyof Style> = {
-  units: string[];
-  value: Style[T] | string;
+export type StyleWithFunction = {
+  function: string;
+  values: Array<StyleWithFunction | string | number>;
 };
 
 export interface Atom {
@@ -203,9 +203,6 @@ function create(options: CreateOptions) {
   setStyles(newStyles);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const unitRecord: Record<string, (...options: any[]) => any> = {};
-
 function evaluate(name: string, atom: Atom) {
   const atomStyles: Style[] = [];
   let newStyles: Record<string, Style[] | undefined> = {
@@ -215,15 +212,15 @@ function evaluate(name: string, atom: Atom) {
   for (const [index, originalStyles] of atom.styles.entries()) {
     const styles = { ...originalStyles } as Style;
 
-    for (const [key, value] of Object.entries(originalStyles)) {
-      let newValue = value;
-      if (isStyleWithUnits(value)) {
-        for (const unit of value.units) {
-          newValue = unitRecord[unit](value);
-        }
-        (styles as Record<string, unknown>)[key] = newValue;
-      }
-    }
+    // for (const [key, value] of Object.entries(originalStyles)) {
+    //   let newValue = value;
+    //   if (isStyleWithUnits(value)) {
+    //     for (const unit of value.units) {
+    //       newValue = unitRecord[unit](value);
+    //     }
+    //     (styles as Record<string, unknown>)[key] = newValue;
+    //   }
+    // }
 
     const atRules = atom.atRules?.[index];
 
@@ -503,10 +500,4 @@ function matchAtRule({
   }
 
   return false;
-}
-
-function isStyleWithUnits<T extends keyof Style>(
-  style: Style[T] | StyleWithUnits<T>
-): style is StyleWithUnits<T> {
-  return typeof style === "object" && "units" in style;
 }

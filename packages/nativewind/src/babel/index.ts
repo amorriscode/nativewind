@@ -33,6 +33,7 @@ import { validateConfig } from "tailwindcss/lib/util/validateConfig";
 
 import { getImportBlockedComponents } from "./get-import-blocked-components";
 import { extractStyles } from "../postcss";
+import { outputWriter } from "./fs-writer";
 
 export interface TailwindcssReactNativeBabelOptions {
   allowModuleTransform?: "*" | string[];
@@ -109,11 +110,10 @@ export default function (
       "node_modules/.cache/nativewind"
     );
     mkdirSync(outputDirectory, { recursive: true });
-
-    extractStyles({
-      ...tailwindConfig,
-      output: join(outputDirectory, "styles.js"),
-    });
+    outputWriter(
+      join(outputDirectory, "styles.js"),
+      extractStyles(tailwindConfig)
+    );
   }
 
   if (!canTransform) {
