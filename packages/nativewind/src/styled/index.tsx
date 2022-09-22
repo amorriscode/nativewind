@@ -10,6 +10,10 @@ import {
   PropsWithoutRef,
   useContext,
   useMemo,
+  Children,
+  isValidElement,
+  ComponentPropsWithRef,
+  ComponentProps,
 } from "react";
 import { NativeWindStyleSheet } from "../style-sheet";
 import { InteractionProps, useInteraction } from "./use-interaction";
@@ -18,6 +22,7 @@ import { StyleProp } from "react-native";
 import { GroupContext, IsolateGroupContext } from "./group-context";
 import { useComponentState } from "./use-component-state";
 import { Style } from "../types/common";
+import { isFragment, isValidElementType } from "react-is";
 
 export interface StyledOptions<
   T,
@@ -144,7 +149,11 @@ export function styled<
     /**
      * Resolve the className->style
      */
-    const { styles, meta = {} } = NativeWindStyleSheet.useSync(className, {
+    const {
+      styles,
+      meta = {},
+      childClasses,
+    } = NativeWindStyleSheet.useSync(className, {
       ...componentState,
       ...groupContext,
       ...isolateGroupContext,
@@ -166,7 +175,22 @@ export function styled<
     /**
      * Resolve the child styles
      */
-    const children = componentChildren;
+    let children = componentChildren;
+    if (childClasses && children) {
+      children = flattenChildren(componentChildren)?.map((child) => {
+        if (isValidElement(child)) {
+          const props = child.props;
+          return createElement(StyledComponent, {
+            component: child,
+            key: child.key,
+            ...props,
+            className: `${childClasses} ${props.className ?? props.tw ?? ""}`,
+          });
+        }
+
+        return child;
+      });
+    }
 
     /**
      * Pass the styles to the element
@@ -215,4 +239,33 @@ export function styled<
   }
 
   return forwardRef(Styled);
+}
+
+export type StyledComponentProps<P> = StyledProps<P> & {
+  component: React.ComponentType<P>;
+};
+
+export const StyledComponent = forwardRef(({ component, ...options }, ref) => {
+  const Component = useMemo(() => styled(component), [component]);
+  return (
+    <Component
+      {...(options as unknown as ComponentProps<typeof Component>)}
+      ref={ref as ComponentPropsWithRef<typeof Component>["ref"]}
+    />
+  );
+}) as <T, P>(
+  props: StyledComponentProps<P> & React.RefAttributes<T>
+) => React.ReactElement | null;
+
+function flattenChildren(
+  children: ReactNode | ReactNode[]
+): ReactNode[] | undefined | null {
+  return Children.toArray(children).flatMap((child) => {
+    if (isFragment(child)) return flattenChildren(child.props.children);
+    if (typeof child === "string" || typeof child === "number") {
+      return child;
+    }
+    if (!child || !isValidElement(child)) return [];
+    return child;
+  });
 }

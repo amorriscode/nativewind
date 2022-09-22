@@ -11,10 +11,10 @@ export const gap = plugin(function ({ matchUtilities, theme }) {
           "&": {
             marginLeft: `-${value}`,
             marginTop: `-${value}`,
-            "@selector (> *)": {
-              marginLeft: value,
-              marginTop: value,
-            },
+          },
+          "&:children": {
+            marginLeft: value,
+            marginTop: value,
           },
         };
       },
@@ -25,9 +25,9 @@ export const gap = plugin(function ({ matchUtilities, theme }) {
         return {
           "&": {
             "margin-left": `-${value}`,
-            "@selector (> *)": {
-              "margin-left": value,
-            },
+          },
+          "&:children": {
+            "margin-left": value,
           },
         };
       },
@@ -38,9 +38,9 @@ export const gap = plugin(function ({ matchUtilities, theme }) {
         return {
           "&": {
             "margin-top": `-${value}`,
-            "@selector (> *)": {
-              "margin-top": value,
-            },
+          },
+          "&:children": {
+            "margin-top": value,
           },
         };
       },

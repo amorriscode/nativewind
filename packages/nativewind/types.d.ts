@@ -1,5 +1,12 @@
 import "react-native";
 
+declare namespace JSX {
+  interface IntrinsicAttributes {
+    className?: string;
+    tw?: string;
+  }
+}
+
 declare module "react-native" {
   interface FlatListProps<ItemT> extends VirtualizedListProps<ItemT> {
     className?: string;

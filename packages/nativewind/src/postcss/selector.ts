@@ -5,6 +5,8 @@ export function getSelector(node: CssNode) {
 
   const conditions: string[] = [];
 
+  let hasParent = false;
+
   walk(node, (node) => {
     switch (node.type) {
       case "TypeSelector":
@@ -17,8 +19,14 @@ export function getSelector(node: CssNode) {
       case "ClassSelector":
         tokens.push(`.${node.name}`);
         break;
-      case "PseudoClassSelector":
-        conditions.push(node.name);
+      case "PseudoClassSelector": {
+        if (node.name === "children") {
+          hasParent = true;
+          tokens.push(`:${node.name}`);
+        } else {
+          conditions.push(node.name);
+        }
+      }
     }
   });
 
@@ -32,5 +40,9 @@ export function getSelector(node: CssNode) {
     })
     .replaceAll("\\", "");
 
-  return { selector, conditions };
+  const parentSelector = hasParent
+    ? selector.replaceAll(":children", "")
+    : undefined;
+
+  return { selector, conditions, parentSelector };
 }

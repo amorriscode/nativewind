@@ -8,7 +8,6 @@ import {
   PlatformOSType,
   StyleSheet,
 } from "react-native";
-import { match } from "css-mediaquery";
 import { useSyncExternalStoreWithSelector } from "use-sync-external-store/shim/with-selector";
 
 import { AtRuleTuple, Style } from "../types/common";
@@ -33,7 +32,6 @@ export interface Atom {
   topics?: string[];
   topicSubscription?: () => void;
   childClasses?: string[];
-  transforms?: Record<string, true>;
   meta?: Record<string, true>;
 }
 
@@ -65,7 +63,7 @@ const createSubscriber =
 let dimensionsListener: EmitterSubscription | undefined = undefined;
 
 const atoms: Map<string, Atom> = new Map();
-const childClasses: Map<string, string[]> = new Map();
+const childClasses: Map<string, string> = new Map();
 const styleMeta: Map<string, Record<string, boolean>> = new Map();
 
 let styleSets: Record<string, Style[]> = {};
@@ -212,15 +210,11 @@ function evaluate(name: string, atom: Atom) {
   for (const [index, originalStyles] of atom.styles.entries()) {
     const styles = { ...originalStyles } as Style;
 
-    // for (const [key, value] of Object.entries(originalStyles)) {
-    //   let newValue = value;
-    //   if (isStyleWithUnits(value)) {
-    //     for (const unit of value.units) {
-    //       newValue = unitRecord[unit](value);
-    //     }
-    //     (styles as Record<string, unknown>)[key] = newValue;
-    //   }
-    // }
+    for (const [key, value] of Object.entries(styles)) {
+      if (typeof value === "object" && "function" in value) {
+        (styles as Record<string, unknown>)[key] = resolveFunction(value);
+      }
+    }
 
     const atRules = atom.atRules?.[index];
 
@@ -237,13 +231,24 @@ function evaluate(name: string, atom: Atom) {
       } else if (rule === "colorScheme") {
         return topicValues["colorScheme"] === params;
       } else {
-        return matchAtRule({
-          rule,
-          params,
-          width: topicValues["device-width"] as number,
-          height: topicValues["device-height"] as number,
-          orientation: topicValues["device-orientation"] as OrientationLockType,
-        });
+        switch (rule) {
+          case "platform":
+            return params === Platform.OS;
+          case "width":
+            return params === topicValues["device-width"];
+          case "min-width":
+            return (params ?? 0) >= topicValues["device-width"];
+          case "max-width":
+            return (params ?? 0) <= topicValues["device-width"];
+          case "height":
+            return params === topicValues["device-height"];
+          case "min-height":
+            return (params ?? 0) >= topicValues["device-height"];
+          case "max-height":
+            return (params ?? 0) <= topicValues["device-height"];
+          default:
+            return true;
+        }
       }
     });
 
@@ -261,7 +266,7 @@ function evaluate(name: string, atom: Atom) {
         }
       }
     } else {
-      // If there are children also add them.
+      // If we failed the atRulesResult, remove the child class styles
       if (atom.childClasses) {
         for (const child of atom.childClasses) {
           newStyles[child] = undefined;
@@ -271,6 +276,36 @@ function evaluate(name: string, atom: Atom) {
   }
 
   return newStyles;
+}
+
+function resolveFunction(
+  style: StyleWithFunction | string | number
+): string | number | undefined {
+  if (typeof style !== "object" || !("function" in style)) {
+    return style;
+  }
+
+  const resolvedValues = style.values.map((value) => resolveFunction(value));
+
+  switch (style.function) {
+    case "inbuilt":
+      return [style.function, "(", resolvedValues.join(", "), ")"].join("");
+    case "vw": {
+      const value = resolvedValues[0];
+      if (typeof value !== "number") return;
+      return value * (topicValues["device-width"] as number);
+    }
+    case "vh": {
+      const value = resolvedValues[0];
+      if (typeof value !== "number") return;
+      return value * (topicValues["device-height"] as number);
+    }
+    case "var": {
+      const [variable, defaultValue] = resolvedValues;
+      if (!variable) return;
+      return topicValues[variable] ?? defaultValue;
+    }
+  }
 }
 
 function useSync(
@@ -370,7 +405,7 @@ function warmCache(tokenSets: Array<string[]>) {
     });
 
     if (children.length > 0) {
-      childClasses.set(key, children);
+      childClasses.set(key, children.join(" "));
     }
   }
 }
@@ -469,35 +504,4 @@ function setDimensions(dimensions: Dimensions) {
         window.width > window.height ? "landscape" : "portrait",
     });
   });
-}
-
-interface MatchAtRuleOptions {
-  rule: string;
-  params?: string;
-  width: number;
-  height: number;
-  orientation: OrientationLockType;
-}
-
-function matchAtRule({
-  rule,
-  params,
-  width,
-  height,
-  orientation,
-}: MatchAtRuleOptions) {
-  if (rule === "media" && params) {
-    return match(params, {
-      type: Platform.OS,
-      "aspect-ratio": width / height,
-      "device-aspect-ratio": width / height,
-      width,
-      height,
-      "device-width": width,
-      "device-height": width,
-      orientation,
-    });
-  }
-
-  return false;
 }

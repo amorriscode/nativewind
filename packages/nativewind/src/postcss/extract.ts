@@ -99,13 +99,25 @@ function addRule(
 
   // eslint-disable-next-line unicorn/no-array-for-each
   selectorList.children.forEach((selectorNode) => {
-    const { selector, conditions: selectorConditions } =
-      getSelector(selectorNode);
+    const {
+      selector,
+      conditions: selectorConditions,
+      parentSelector,
+    } = getSelector(selectorNode);
+
+    createOptions[selector] ??= { styles: [] };
+
+    if (parentSelector) {
+      createOptions[parentSelector] ??= { styles: [], childClasses: [] };
+      createOptions[parentSelector].childClasses = [
+        ...(createOptions[parentSelector].childClasses ?? []),
+        selector,
+      ];
+    }
 
     const conditionSet = new Set([...atRuleConditions, ...selectorConditions]);
     const topicSet = new Set([...atRuleTopics, ...ruleTopics]);
 
-    createOptions[selector] ??= { styles: [] };
     if (topicSet.size > 0) {
       createOptions[selector].topics = [...topicSet];
     }
