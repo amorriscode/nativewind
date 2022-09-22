@@ -48,6 +48,7 @@ module.exports = {
         "commitlint.config.js",
         "tailwind/css.js",
         "tailwind/native.js",
+        "packages/nativewind/__tests__/*",
       ],
       rules: {
         "unicorn/prefer-module": "off",

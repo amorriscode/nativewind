@@ -1,8 +1,9 @@
-import { resolve, sep, posix, join } from "node:path";
-import { statSync, mkdirSync } from "node:fs";
+import { resolve, sep, posix, join, dirname, relative } from "node:path";
+import { statSync, mkdirSync, existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 import type { ConfigAPI, NodePath, PluginPass, Visitor } from "@babel/core";
-import { addNamed } from "@babel/helper-module-imports";
+import { addNamed, addSideEffect } from "@babel/helper-module-imports";
 import {
   Expression,
   identifier,
@@ -10,6 +11,7 @@ import {
   isJSXIdentifier,
   isJSXMemberExpression,
   isJSXSpreadAttribute,
+  isStringLiteral,
   jSXAttribute,
   jsxClosingElement,
   jsxElement,
@@ -31,8 +33,8 @@ import resolveConfigPath from "tailwindcss/lib/util/resolveConfigPath";
 import resolveConfig from "tailwindcss/resolveConfig";
 import { validateConfig } from "tailwindcss/lib/util/validateConfig";
 
-import { getImportBlockedComponents } from "./get-import-blocked-components";
-import { extractStyles } from "../postcss";
+// import { getImportBlockedComponents } from "./get-import-blocked-components";
+import { extractStyles } from "../postcss/extract";
 import { outputWriter } from "./fs-writer";
 
 export interface TailwindcssReactNativeBabelOptions {
@@ -86,9 +88,9 @@ export default function (
         )
   ).map((contentFilePath) => normalizePath(resolve(cwd, contentFilePath)));
 
-  const allowModuleTransform = Array.isArray(options.allowModuleTransform)
-    ? ["react-native", "react-native-web", ...options.allowModuleTransform]
-    : "*";
+  // const allowModuleTransform = Array.isArray(options.allowModuleTransform)
+  //   ? ["react-native", "react-native-web", ...options.allowModuleTransform]
+  //   : "*";
 
   let canCompile = true;
   let canTransform = true;
@@ -104,21 +106,18 @@ export default function (
     }
   }
 
+  const outputDirectory = resolve(
+    // We could use nativewind here, but it breaks the tests
+    // as nativewind doesn't exists in our node_modules!
+    require.resolve("tailwindcss/package.json"),
+    "../../.cache/nativewind"
+  );
   if (canCompile) {
-    const outputDirectory = resolve(
-      process.cwd(),
-      "node_modules/.cache/nativewind"
-    );
     mkdirSync(outputDirectory, { recursive: true });
-    outputWriter(
-      join(outputDirectory, "styles.js"),
-      extractStyles(tailwindConfig)
-    );
   }
 
-  if (!canTransform) {
-    return;
-  }
+  const blockedComponents = new Map<string, Set<string>>();
+  const didTransform = new Set<string>();
 
   const programVisitor: Visitor<
     PluginPass & {
@@ -126,9 +125,50 @@ export default function (
     }
   > = {
     Program: {
-      enter(projectPath, state) {
+      enter(path, state) {
         const filename = state.filename;
         if (!filename) return;
+
+        if (canCompile) {
+          path.traverse({
+            ImportDeclaration(path) {
+              const currentDirectory = dirname(filename);
+              const source = resolve(currentDirectory, path.node.source.value);
+              return compileCSS(
+                path,
+                source,
+                currentDirectory,
+                outputDirectory,
+                tailwindConfig
+              );
+            },
+            CallExpression(path) {
+              if (
+                !("name" in path.node.callee) ||
+                path.node.callee.name !== "require"
+              ) {
+                return;
+              }
+
+              const argument = path.node.arguments[0];
+
+              if (!isStringLiteral(argument)) {
+                return;
+              }
+
+              const currentDirectory = dirname(filename);
+              const source = resolve(currentDirectory, argument.value);
+
+              return compileCSS(
+                path,
+                source,
+                currentDirectory,
+                outputDirectory,
+                tailwindConfig
+              );
+            },
+          });
+        }
 
         const isInContent = micromatch.isMatch(
           normalizePath(filename),
@@ -136,19 +176,60 @@ export default function (
         );
 
         if (!isInContent) {
+          path.skip();
+        }
+
+        blockedComponents.set(filename, new Set());
+      },
+      exit(path, state) {
+        if (state.filename && didTransform.has(state.filename)) {
+          addNamed(path, "StyledComponent", "nativewind");
+        }
+      },
+    },
+    // ImportDeclaration(path, state) {
+    // for (const component of getImportBlockedComponents(path, state)) {
+    //   state.blockList.add(component);
+    // }
+    // },
+    JSXElement: {
+      exit: (path, state) => {
+        if (!state.filename) return;
+
+        const blockList = blockedComponents.get(state.filename);
+
+        if (
+          !blockList ||
+          isWrapper(path.node) ||
+          !canTransform ||
+          !someAttributes(path, ["className", "tw"])
+        ) {
           return;
         }
 
-        projectPath.traverse(visitor, {
-          ...state,
-          canCompile,
-          canTransform,
-          filename,
-          allowModuleTransform,
-          allowRelativeModules: contentFilePaths,
-          blockList: new Set<string>(),
-          tailwindConfig: tailwindConfig,
-        });
+        const name = getElementName(path.node.openingElement);
+
+        if (blockList.has(name) || name[0] !== name[0].toUpperCase()) {
+          return;
+        }
+
+        path.replaceWith(
+          jsxElement(
+            jsxOpeningElement(jsxIdentifier("_StyledComponent"), [
+              ...path.node.openingElement.attributes,
+              jSXAttribute(
+                jSXIdentifier("component"),
+                jsxExpressionContainer(
+                  toExpression(path.node.openingElement.name)
+                )
+              ),
+            ]),
+            jsxClosingElement(jsxIdentifier("_StyledComponent")),
+            path.node.children
+          )
+        );
+
+        didTransform.add(state.filename);
       },
     },
   };
@@ -165,51 +246,6 @@ export interface VisitorState extends PluginPass {
   allowRelativeModules: "*" | string[];
   blockList: Set<string>;
 }
-
-const visitor: Visitor<VisitorState> = {
-  ImportDeclaration(path, state) {
-    for (const component of getImportBlockedComponents(path, state)) {
-      state.blockList.add(component);
-    }
-  },
-  JSXElement: {
-    exit: (path, state) => {
-      const { blockList, canTransform } = state;
-
-      if (
-        isWrapper(path.node) ||
-        !canTransform ||
-        !someAttributes(path, ["className", "tw"])
-      ) {
-        return;
-      }
-
-      const name = getElementName(path.node.openingElement);
-
-      if (blockList.has(name) || name[0] !== name[0].toUpperCase()) {
-        return;
-      }
-
-      path.replaceWith(
-        jsxElement(
-          jsxOpeningElement(jsxIdentifier("_StyledComponent"), [
-            ...path.node.openingElement.attributes,
-            jSXAttribute(
-              jSXIdentifier("component"),
-              jsxExpressionContainer(
-                toExpression(path.node.openingElement.name)
-              )
-            ),
-          ]),
-          jsxClosingElement(jsxIdentifier("_StyledComponent")),
-          path.node.children
-        )
-      );
-
-      addNamed(path, "StyledComponent", "nativewind");
-    },
-  },
-};
 
 function normalizePath(filePath: string) {
   /**
@@ -264,6 +300,28 @@ function toExpression(
     // https://github.com/facebook/jsx/issues/13#issuecomment-54373080
     throw new Error("JSXNamespacedName is not supported by React JSX");
   }
+}
+
+function compileCSS(
+  path: NodePath,
+  source: string,
+  currentDirectory: string,
+  outputDirectory: string,
+  tailwindConfig: Config
+) {
+  if (!source.endsWith(".css")) {
+    return;
+  }
+
+  if (!existsSync(source)) return;
+
+  const css = readFileSync(source, "utf8");
+
+  path.remove();
+  const hash = createHash("md5").update(css).digest("hex");
+  const outputFile = join(outputDirectory, `${hash}.js`);
+  outputWriter(outputFile, extractStyles(tailwindConfig, css));
+  addSideEffect(path, relative(currentDirectory, outputFile));
 }
 
 function someAttributes(path: NodePath<JSXElement>, names: string[]) {

@@ -1,6 +1,6 @@
 import { Text, View } from "react-native";
 
-import "./styles.css";
+require("./styles.css");
 
 export function Test() {
   return (

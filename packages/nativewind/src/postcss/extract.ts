@@ -21,8 +21,6 @@ export function extractStyles(
     postcssColorFunctionalNotation(),
   ]).process(cssInput).css;
 
-  // console.log(tailwindOutput);
-
   const createOptions: CreateOptions = {};
 
   walkAst(parse(tailwindOutput), createOptions);
